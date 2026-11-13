@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="light" data-orientation="portrait">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -131,6 +131,7 @@
   .stat.paid-stat .label{color:var(--text);opacity:.78}
   .stat.paid-stat .paid-sub{font-size:11px;font-weight:700;margin-top:4px;opacity:.95;letter-spacing:.01em}
 
+  .main-grid{display:block}
   .calendar{background:var(--card);border-radius:16px;padding:14px;
     box-shadow:var(--shadow);transition:background .2s}
   .weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:8px}
@@ -329,6 +330,52 @@
   .popover-actions{display:flex;justify-content:flex-end}
   .btn-small{padding:6px 12px;font-size:13px}
 
+  /* ── Переключатель ориентации ── */
+  .orientation-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .orientation-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;padding:14px 10px;border:1.5px solid var(--line);border-radius:12px;
+    background:var(--card);color:var(--muted);font-family:inherit;font-size:13px;
+    font-weight:600;cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s,transform .1s}
+  .orientation-btn:hover{border-color:var(--accent);color:var(--text);background:var(--hover-bg-2)}
+  .orientation-btn:active{transform:scale(.98)}
+  .orientation-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(59,110,245,.08)}
+  [data-theme="dark"] .orientation-btn.active{background:rgba(91,134,255,.14)}
+  .orientation-icon{width:26px;height:26px;color:currentColor}
+  .orientation-icon rect:first-child{transition:fill .15s,fill-opacity .15s}
+  .orientation-btn.active .orientation-icon rect:first-child{fill:currentColor;fill-opacity:.12}
+
+  /* ── Раскладка для альбомной ориентации ── */
+  [data-orientation="landscape"] .app{max-width:1400px}
+
+  @media (min-width:720px){
+    [data-orientation="landscape"] .main-grid{
+      display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);
+      gap:14px;align-items:start}
+    [data-orientation="landscape"] .main-grid .payments-panel{margin-top:0}
+  }
+
+  @media (max-width:719px){
+    [data-orientation="landscape"] .app{padding:8px 6px 24px}
+    [data-orientation="landscape"] .summary{
+      grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
+    [data-orientation="landscape"] .stat{padding:8px 10px;border-radius:10px}
+    [data-orientation="landscape"] .stat .label{font-size:9px;margin-bottom:3px}
+    [data-orientation="landscape"] .stat .value{font-size:14px}
+    [data-orientation="landscape"] .stat .value small{font-size:9px}
+    [data-orientation="landscape"] .calendar{padding:6px;border-radius:10px}
+    [data-orientation="landscape"] .weekdays,
+    [data-orientation="landscape"] .grid{gap:2px}
+    [data-orientation="landscape"] .weekdays div{font-size:9px;padding:2px 0}
+    [data-orientation="landscape"] .day{min-height:64px;padding:2px;border-radius:6px}
+    [data-orientation="landscape"] .hours{font-size:13px;padding:1px 0}
+    [data-orientation="landscape"] .num{font-size:9px;line-height:12px;padding:0 2px}
+    [data-orientation="landscape"] .cell-bottom{height:11px}
+    [data-orientation="landscape"] .pay{font-size:8px}
+    [data-orientation="landscape"] .payment-pill{padding:1px 2px;font-size:8px}
+    [data-orientation="landscape"] .payments-panel{padding:12px;border-radius:12px}
+  }
+
   @media (max-width:700px){
     .app{padding:12px 8px 40px}
     .topbar{gap:6px}
@@ -407,20 +454,22 @@
       </div>
     </section>
 
-    <section class="calendar">
-      <div class="weekdays"><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div></div>
-      <div class="grid" id="grid"></div>
-    </section>
+    <div class="main-grid">
+      <section class="calendar">
+        <div class="weekdays"><div>Пн</div><div>Вт</div><div>Ср</div><div>Чт</div><div>Пт</div><div>Сб</div><div>Вс</div></div>
+        <div class="grid" id="grid"></div>
+      </section>
 
-    <section class="payments-panel" id="paymentsPanel">
-      <div class="payments-header"><h3>💰 Выплаты за месяц</h3></div>
-      <div class="payments-list" id="paymentsList"></div>
-      <button class="btn primary add-payment-btn" id="addPaymentBtn">+ Добавить выплату</button>
-      <label class="check fully-paid-check" id="fullyPaidLabel">
-        <input type="checkbox" id="fullyPaidChk">
-        <span>Считать зарплату выплаченной</span>
-      </label>
-    </section>
+      <section class="payments-panel" id="paymentsPanel">
+        <div class="payments-header"><h3>💰 Выплаты за месяц</h3></div>
+        <div class="payments-list" id="paymentsList"></div>
+        <button class="btn primary add-payment-btn" id="addPaymentBtn">+ Добавить выплату</button>
+        <label class="check fully-paid-check" id="fullyPaidLabel">
+          <input type="checkbox" id="fullyPaidChk">
+          <span>Считать зарплату выплаченной</span>
+        </label>
+      </section>
+    </div>
 
     <p class="footnote">
       Вводите часы прямо в календаре — расчёт обновляется мгновенно.<br>
@@ -539,6 +588,25 @@
           <div class="field"><label>Цвет праздников</label>
             <div class="color-row"><input type="color" id="holidayColor"><button class="btn-mini" data-reset="holiday" title="По умолчанию">↺</button></div>
           </div>
+        </div>
+      </section>
+      <section>
+        <h3>Ориентация</h3>
+        <div class="orientation-toggle" id="orientationToggle" role="radiogroup" aria-label="Ориентация интерфейса">
+          <button class="orientation-btn" data-orientation="portrait" role="radio" aria-checked="false">
+            <svg class="orientation-icon" viewBox="0 0 20 32" fill="none" aria-hidden="true">
+              <rect x="1" y="1" width="18" height="30" rx="3" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="7" y1="4.5" x2="13" y2="4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Книжная</span>
+          </button>
+          <button class="orientation-btn" data-orientation="landscape" role="radio" aria-checked="false">
+            <svg class="orientation-icon" viewBox="0 0 32 20" fill="none" aria-hidden="true">
+              <rect x="1" y="1" width="30" height="18" rx="3" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="4.5" y1="7" x2="4.5" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Альбомная</span>
+          </button>
         </div>
       </section>
       <section>
@@ -737,9 +805,13 @@
   function loadState() {
     try {
       const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-      if (s && s.calendars) { s.theme = s.theme || 'light'; return s; }
+      if (s && s.calendars) {
+        s.theme = s.theme || 'light';
+        s.orientation = s.orientation || 'portrait';
+        return s;
+      }
     } catch (e) {}
-    return { calendars: {}, theme: 'light' };
+    return { calendars: {}, theme: 'light', orientation: 'portrait' };
   }
   function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
@@ -824,8 +896,6 @@
     return { year: y, month0: m - 1 };
   }
 
-  // Собираем все платежи из всех месячных корзин, чья фактическая дата (paidOn)
-  // попадает в запрошенный месяц. Используется для отрисовки значков.
   function getPaidOnIndex(year, month0) {
     const result = {};
     for (const monthKey in currentCal.months) {
@@ -848,8 +918,6 @@
     return result;
   }
 
-  // Платежи, зачтённые в текущий просматриваемый месяц (корзина по view).
-  // Именно они идут в карточку «Выплачено» и в список под календарём.
   function getPaymentInfo() {
     const salary = currentDays.reduce((s, d) => s + d.pay, 0);
     const bucket = bucketKey(view.year, view.month);
@@ -877,11 +945,24 @@
   }
 
   function currentTheme() { return state.theme || 'light'; }
+  function currentOrientation() { return state.orientation || 'portrait'; }
 
   function applyTheme() {
     const theme = currentTheme();
     document.documentElement.setAttribute('data-theme', theme);
     setColors(theme, currentCal ? currentCal.colors : { weekend: null, holiday: null });
+  }
+  function applyOrientation() {
+    const o = currentOrientation();
+    document.documentElement.setAttribute('data-orientation', o);
+    // Best-effort: попробовать зафиксировать физическую ориентацию.
+    // Работает только в некоторых браузерах и обычно требует fullscreen.
+    try {
+      if (screen.orientation && typeof screen.orientation.lock === 'function') {
+        const p = screen.orientation.lock(o);
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      }
+    } catch (e) {}
   }
   function setColors(theme, colors) {
     const def = THEME_DEFAULTS[theme];
@@ -898,7 +979,7 @@
   let view = { year: now.getFullYear(), month: now.getMonth() };
   let currentCalId = null, currentCal = null, currentMonth = null, currentDays = [];
   let editingDay = null;
-  let editingPayment = null; // { bucket, id } — bucket = "YYYY-MM" корзины, куда зачтён платёж
+  let editingPayment = null;
   let paidOnIndex = {};
   const openModals = new Set();
 
@@ -1173,6 +1254,7 @@
   function openAppearanceSettings() {
     $('settingsTitle').textContent = currentCal ? currentCal.name : 'Настройки';
     updateThemeChips();
+    updateOrientationChips();
     $('calendarColorsBlock').style.display = currentCal ? '' : 'none';
     if (currentCal) updateColorInputs();
     $('settingsOverlay').classList.add('show');
@@ -1419,6 +1501,26 @@
     };
   });
 
+  // ── Переключатель ориентации ──
+  $('orientationToggle').addEventListener('click', e => {
+    const btn = e.target.closest('[data-orientation]');
+    if (!btn) return;
+    const o = btn.dataset.orientation;
+    if (currentOrientation() === o) return;
+    state.orientation = o;
+    saveState();
+    applyOrientation();
+    updateOrientationChips();
+  });
+  function updateOrientationChips() {
+    const o = currentOrientation();
+    document.querySelectorAll('#orientationToggle .orientation-btn').forEach(b => {
+      const active = b.dataset.orientation === o;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-checked', active ? 'true' : 'false');
+    });
+  }
+
   $('fillNormBtn').onclick = () => {
     for (const d of currentDays) if (d.isWork && d.norm > 0) currentMonth.hours[d.d] = d.norm;
     saveState(); renderCalendar();
@@ -1519,7 +1621,7 @@
     renderCalendar();
   };
 
-  // ── Выплаты: селекторы даты с валидацией ──
+  // ── Выплаты ──
   function maxDayFor(year, month0) {
     const today = new Date();
     if (year === today.getFullYear() && month0 === today.getMonth()) {
@@ -1527,19 +1629,16 @@
     }
     return daysInMonth(year, month0);
   }
-
   function buildYearOptions(selectedYear) {
     const today = new Date();
     const currentYear = today.getFullYear();
     if (selectedYear > currentYear) selectedYear = currentYear;
-    const minYear = 2000;
     let html = '';
-    for (let y = minYear; y <= currentYear; y++) {
+    for (let y = 2000; y <= currentYear; y++) {
       html += '<option value="' + y + '"' + (y === selectedYear ? ' selected' : '') + '>' + y + '</option>';
     }
     return html;
   }
-
   function buildMonthOptions(selectedMonth, selectedYear) {
     const today = new Date();
     const maxMonth = selectedYear === today.getFullYear() ? today.getMonth() : 11;
@@ -1550,7 +1649,6 @@
     }
     return html;
   }
-
   function buildDayOptions(selectedDay, selectedYear, selectedMonth) {
     const max = maxDayFor(selectedYear, selectedMonth);
     const eff = Math.min(Math.max(1, selectedDay || 1), max);
@@ -1560,7 +1658,6 @@
     }
     return html;
   }
-
   function setPaymentDate(year, month0, day) {
     $('paymentYear').innerHTML = buildYearOptions(year);
     year = parseInt($('paymentYear').value, 10);
@@ -1569,7 +1666,6 @@
     $('paymentDay').innerHTML = buildDayOptions(day, year, month0);
     updatePaymentDatePreview();
   }
-
   function updatePaymentDatePreview() {
     const y = parseInt($('paymentYear').value, 10);
     const m = parseInt($('paymentMonth').value, 10);
@@ -1583,7 +1679,6 @@
     }
     el.textContent = text;
   }
-
   function defaultPaymentDate() {
     const today = new Date();
     if (view.year === today.getFullYear() && view.month === today.getMonth()) return today;
@@ -1591,7 +1686,6 @@
     if (lastDayOfView < today) return lastDayOfView;
     return today;
   }
-
   $('paymentYear').addEventListener('change', () => {
     const year = parseInt($('paymentYear').value, 10);
     const today = new Date();
@@ -1606,7 +1700,6 @@
     $('paymentDay').innerHTML = buildDayOptions(day, year, month0);
     updatePaymentDatePreview();
   });
-
   $('paymentMonth').addEventListener('change', () => {
     const year = parseInt($('paymentYear').value, 10);
     const month0 = parseInt($('paymentMonth').value, 10);
@@ -1616,7 +1709,6 @@
     $('paymentDay').innerHTML = buildDayOptions(day, year, month0);
     updatePaymentDatePreview();
   });
-
   $('paymentDay').addEventListener('change', updatePaymentDatePreview);
 
   $('addPaymentBtn').onclick = () => {
@@ -1624,12 +1716,10 @@
     openPaymentDialog(bucket, null);
     setTimeout(() => { try { $('paymentDay').focus(); } catch (e) {} }, 80);
   };
-
   function openPaymentDialog(bucket, id) {
     const b = parseBucket(bucket);
     const bucketData = getMonthData(currentCal, b.year, b.month0);
     const p = id ? bucketData.payments[id] : null;
-
     if (!p) {
       editingPayment = { bucket, id: null };
       $('paymentModalTitle').textContent = 'Новая выплата';
@@ -1651,7 +1741,6 @@
     $('paymentOverlay').classList.add('show');
     openModals.add('paymentOverlay');
   }
-
   $('savePaymentBtn').onclick = () => {
     if (!editingPayment) return;
     const year = parseInt($('paymentYear').value, 10);
@@ -1659,28 +1748,21 @@
     const day = parseInt($('paymentDay').value, 10);
     if (!year || isNaN(month0) || !day) { alert('Выберите дату'); return; }
     if (day < 1 || day > maxDayFor(year, month0)) { alert('Некорректная дата'); return; }
-
     const amount = parseFloat($('paymentAmount').value) || 0;
     if (amount <= 0) { alert('Введите сумму больше нуля'); return; }
     const note = ($('paymentNote').value || '').trim();
     const paidOn = dateKeyFrom(year, month0, day);
-
-    // Запись всегда идёт в корзину editingPayment.bucket — она была определена
-    // при открытии диалога (месяц, который просматривался). paidOn — отдельно.
     const b = parseBucket(editingPayment.bucket);
     const bucketData = getMonthData(currentCal, b.year, b.month0);
-
     const targetId = editingPayment.id || genId('pay_');
     bucketData.payments[targetId] = { amount, paidOn };
     if (note) bucketData.payments[targetId].note = note;
-
     saveState();
     $('paymentOverlay').classList.remove('show');
     openModals.delete('paymentOverlay');
     editingPayment = null;
     renderCalendar();
   };
-
   $('deletePaymentBtn').onclick = () => {
     if (!editingPayment || !editingPayment.id) return;
     if (!confirm('Удалить эту выплату?')) return;
@@ -1693,7 +1775,6 @@
     editingPayment = null;
     renderCalendar();
   };
-
   $('paymentsList').addEventListener('click', e => {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -1713,7 +1794,6 @@
       saveState(); renderCalendar();
     }
   });
-
   $('fullyPaidChk').addEventListener('change', function () {
     currentMonth.fullyPaidOverride = this.checked;
     saveState(); renderPayments(); updateSummary(); renderList();
@@ -1802,7 +1882,6 @@
     clone.querySelector('#listScreen')?.remove();
     const calScreen = clone.querySelector('#calendarScreen');
     if (calScreen) calScreen.style.display = '';
-
     if (calScreen && currentCal && currentCal.name) {
       const nameEl = document.createElement('div');
       nameEl.textContent = currentCal.name;
@@ -1812,7 +1891,6 @@
     ['.footnote','.back-btn','.actions','.navbtn','.day-tools','.payment-pill',
      '.pay-actions','#addPaymentBtn','.fully-paid-check'].forEach(sel =>
       clone.querySelectorAll(sel).forEach(el => el.remove()));
-
     clone.style.paddingBottom = '24px';
     return clone;
   }
@@ -1898,8 +1976,10 @@
         if (!confirm('Заменить все календари данными из файла?')) return;
         state = data;
         if (!state.theme) state.theme = 'light';
+        if (!state.orientation) state.orientation = 'portrait';
         saveState();
         closeAllModals();
+        applyOrientation();
         navigate('/');
         alert('Данные загружены: ' + Object.keys(state.calendars).length + ' календарь(ей)');
       } catch (err) { alert('Ошибка импорта: ' + err.message); }
@@ -1909,6 +1989,7 @@
   });
 
   if (!location.hash) history.replaceState(null, '', '#/');
+  applyOrientation();
   route();
 })();
 </script>
