@@ -66,7 +66,7 @@
   }
   .app { max-width: 1120px; margin: 0 auto; padding: 16px 14px 60px; }
 
-  .list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; padding-top: 6px; }
+  .list-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 18px; padding-top: 6px; }
   .list-header h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
   .calendar-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
   .cal-card {
@@ -248,7 +248,6 @@
   .day.off .hours:hover, .day.holiday .hours:hover { background: transparent; }
   .day.off .hours:focus, .day.holiday .hours:focus { background: transparent; box-shadow: inset 0 0 0 2px var(--accent); }
 
-  /* Фиксированная высота — .hours получает одинаковую высоту во всех ячейках */
   .cell-bottom {
     display: flex;
     justify-content: space-between;
@@ -485,7 +484,7 @@
     .app { padding: 12px 8px 40px; }
     .topbar { gap: 6px; }
     .topbar .btn { padding: 7px 10px; font-size: 13px; }
-    #settingsBtn { padding: 7px 12px; }
+    #settingsBtn, #listSettingsBtn { padding: 7px 12px; }
     .month-label { font-size: 15px; min-width: auto; padding: 0 6px; }
     .summary { grid-template-columns: repeat(2, 1fr); }
     .stat.money, .stat.paid-stat { grid-column: span 1; }
@@ -514,7 +513,10 @@
 
 <div class="app">
   <div id="listScreen" class="screen">
-    <header class="list-header"><h1>Мои календари</h1></header>
+    <header class="list-header">
+      <h1>Мои календари</h1>
+      <button class="btn primary" id="listSettingsBtn" title="Настройки">⚙</button>
+    </header>
     <div id="calendarList" class="calendar-list"></div>
     <button class="add-cal-btn" id="addCalendarBtn"><span class="add-icon">+</span>Добавить календарь</button>
   </div>
@@ -529,7 +531,7 @@
       </div>
       <div class="actions">
         <div class="export-wrap">
-          <button class="btn" id="exportBtn">Экспорт ▾</button>
+          <button class="btn" id="exportBtn">☐ ▾</button>
           <div class="export-menu" id="exportMenu">
             <button data-export="png">📷 Скачать PNG</button>
             <button data-export="jpg">🖼️ Скачать JPG</button>
@@ -698,11 +700,13 @@
           <button class="chip" data-theme="light">☀ Светлая</button>
           <button class="chip" data-theme="dark">🌙 Тёмная</button>
         </div>
-        <div class="field"><label>Цвет выходных</label>
-          <div class="color-row"><input type="color" id="weekendColor"><button class="btn-mini" data-reset="weekend" title="По умолчанию">↺</button></div>
-        </div>
-        <div class="field"><label>Цвет праздников</label>
-          <div class="color-row"><input type="color" id="holidayColor"><button class="btn-mini" data-reset="holiday" title="По умолчанию">↺</button></div>
+        <div id="calendarColorsBlock">
+          <div class="field"><label>Цвет выходных</label>
+            <div class="color-row"><input type="color" id="weekendColor"><button class="btn-mini" data-reset="weekend" title="По умолчанию">↺</button></div>
+          </div>
+          <div class="field"><label>Цвет праздников</label>
+            <div class="color-row"><input type="color" id="holidayColor"><button class="btn-mini" data-reset="holiday" title="По умолчанию">↺</button></div>
+          </div>
         </div>
       </section>
 
@@ -881,7 +885,6 @@
     const [r2, g2, b2] = hexToRgb(c2);
     return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
   }
-  // 0–66%: красно-оранжевый → жёлтый; 66–100%: жёлтый → зелёный
   function paidColor(pct, theme) {
     const p = PAID_PALETTE[theme] || PAID_PALETTE.light;
     const clamped = Math.max(0, Math.min(100, pct));
@@ -972,11 +975,12 @@
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object' && parsed.calendars) {
+          if (!parsed.theme) parsed.theme = 'light';
           return parsed;
         }
       }
     } catch (e) {}
-    return { calendars: {} };
+    return { calendars: {}, theme: 'light' };
   }
 
   function saveState() {
@@ -1094,14 +1098,16 @@
     return parsed.day + ' ' + MONTHS_SHORT[parsed.month0] + yearSuffix;
   }
 
+  function currentTheme() { return state.theme || 'light'; }
+
   function applyTheme() {
-    if (!currentCal) {
-      document.documentElement.setAttribute('data-theme', 'light');
-      setColors('light', { weekend: null, holiday: null });
-      return;
+    const theme = currentTheme();
+    document.documentElement.setAttribute('data-theme', theme);
+    if (currentCal) {
+      setColors(theme, currentCal.colors);
+    } else {
+      setColors(theme, { weekend: null, holiday: null });
     }
-    document.documentElement.setAttribute('data-theme', currentCal.theme);
-    setColors(currentCal.theme, currentCal.colors);
   }
   function setColors(theme, colors) {
     const def = THEME_DEFAULTS[theme];
@@ -1206,7 +1212,7 @@
     const cls = ['day'];
     let badges = '';
     let dayFg = '';
-    const themeDef = THEME_DEFAULTS[currentCal.theme];
+    const themeDef = THEME_DEFAULTS[currentTheme()];
 
     if (d.isHoliday) {
       cls.push('holiday');
@@ -1269,9 +1275,8 @@
     const fill = $('sPaidFill');
 
     if (pi.salary > 0) {
-      // Прогресс-заливка слева-направо + сплошной цвет по проценту
       fill.style.clipPath = 'inset(0 ' + (100 - pctClamped) + '% 0 0)';
-      fill.style.backgroundColor = paidColor(pctClamped, currentCal.theme);
+      fill.style.backgroundColor = paidColor(pctClamped, currentTheme());
       sub.textContent = (pctClamped >= 99.995) ? '✓' : Math.round(pctClamped) + '%';
     } else {
       fill.style.clipPath = 'inset(0 100% 0 0)';
@@ -1379,7 +1384,6 @@
         normPerDay: 8,
         shift: { pattern: [2, 2], startDate: formatDateInput(new Date()) }
       },
-      theme: 'light',
       colors: { weekend: null, holiday: null },
       premiums: [],
       months: {}
@@ -1421,11 +1425,14 @@
   }
 
   $('settingsBtn').onclick = () => { if (currentCal) openAppearanceSettings(); };
+  $('listSettingsBtn').onclick = () => { openAppearanceSettings(); };
 
   function openAppearanceSettings() {
-    $('settingsTitle').textContent = currentCal.name;
+    $('settingsTitle').textContent = currentCal ? currentCal.name : 'Настройки';
     updateThemeChips();
-    updateColorInputs();
+    const colorsBlock = $('calendarColorsBlock');
+    if (colorsBlock) colorsBlock.style.display = currentCal ? '' : 'none';
+    if (currentCal) updateColorInputs();
     $('settingsOverlay').classList.add('show');
     openModals.add('settingsOverlay');
   }
@@ -1697,32 +1704,42 @@
   $('themeChips').addEventListener('click', e => {
     const b = e.target.closest('.chip'); if (!b) return;
     const t = b.dataset.theme;
-    if (currentCal.theme === t) return;
-    currentCal.theme = t;
-    saveState(); applyTheme(); updateThemeChips(); updateColorInputs(); renderCalendar(); renderList();
+    if (currentTheme() === t) return;
+    state.theme = t;
+    saveState();
+    applyTheme();
+    updateThemeChips();
+    if (currentCal) updateColorInputs();
+    renderCalendar();
+    renderList();
   });
   function updateThemeChips() {
-    document.querySelectorAll('#themeChips .chip').forEach(c => c.classList.toggle('active', c.dataset.theme === currentCal.theme));
+    const t = currentTheme();
+    document.querySelectorAll('#themeChips .chip').forEach(c => c.classList.toggle('active', c.dataset.theme === t));
   }
   function updateColorInputs() {
-    const def = THEME_DEFAULTS[currentCal.theme];
+    if (!currentCal) return;
+    const def = THEME_DEFAULTS[currentTheme()];
     $('weekendColor').value = currentCal.colors.weekend || def.weekend;
     $('holidayColor').value = currentCal.colors.holiday || def.holiday;
   }
   $('weekendColor').addEventListener('input', function () {
-    const def = THEME_DEFAULTS[currentCal.theme];
+    if (!currentCal) return;
+    const def = THEME_DEFAULTS[currentTheme()];
     const v = (this.value || '').toLowerCase();
     currentCal.colors.weekend = (v === def.weekend.toLowerCase()) ? null : v;
     saveState(); applyTheme(); renderCalendar();
   });
   $('holidayColor').addEventListener('input', function () {
-    const def = THEME_DEFAULTS[currentCal.theme];
+    if (!currentCal) return;
+    const def = THEME_DEFAULTS[currentTheme()];
     const v = (this.value || '').toLowerCase();
     currentCal.colors.holiday = (v === def.holiday.toLowerCase()) ? null : v;
     saveState(); applyTheme(); renderCalendar();
   });
   document.querySelectorAll('[data-reset]').forEach(btn => {
     btn.onclick = () => {
+      if (!currentCal) return;
       currentCal.colors[btn.dataset.reset] = null;
       saveState(); applyTheme(); updateColorInputs(); renderCalendar();
     };
@@ -2240,6 +2257,7 @@
         if (!data || typeof data !== 'object' || !data.calendars) throw new Error('неверный формат');
         if (!confirm('Заменить все календари данными из файла?')) return;
         state = data;
+        if (!state.theme) state.theme = 'light';
         saveState();
         closeAllModals();
         navigate('/');
