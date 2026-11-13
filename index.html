@@ -136,7 +136,7 @@
   .export-menu {
     position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
     background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 5px; min-width: 210px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.18); padding: 5px; min-width: 200px;
     display: none;
   }
   .export-menu.show { display: block; }
@@ -155,7 +155,6 @@
   .stat .value small { font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
   .stat.money { background: linear-gradient(135deg, #3b6ef5, #6d94ff); color: #fff; }
   .stat.money .label { color: rgba(255,255,255,.78); }
-  .stat.money .money-status { font-size: 11px; font-weight: 600; margin-top: 4px; opacity: .92; }
   .stat.money.clickable {
     cursor: pointer;
     transition: transform .15s, box-shadow .15s, background .2s;
@@ -177,11 +176,36 @@
   .stat.money.clickable:hover .label .cfg-indicator {
     opacity: 1;
   }
-  .stat.paid-stat.fully { background: linear-gradient(135deg, #1f9d55, #2bb86a); color: #fff; }
-  .stat.paid-stat.fully .label { color: rgba(255,255,255,.8); }
-  .stat.paid-stat.partial { background: linear-gradient(135deg, #e07a00, #ffa833); color: #fff; }
-  .stat.paid-stat.partial .label { color: rgba(255,255,255,.85); }
-  .stat.paid-stat .paid-sub { font-size: 11px; font-weight: 600; margin-top: 4px; opacity: .9; }
+
+  /* ── Карточка «Выплачено» с прогресс-заливкой слева-направо ── */
+  .stat.paid-stat {
+    position: relative;
+    overflow: hidden;
+  }
+  .stat.paid-stat .paid-fill {
+    position: absolute;
+    inset: 0;
+    background-color: transparent;
+    clip-path: inset(0 100% 0 0);
+    transition: clip-path .45s ease, background-color .35s ease;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .stat.paid-stat > *:not(.paid-fill) {
+    position: relative;
+    z-index: 1;
+  }
+  .stat.paid-stat .label {
+    color: var(--text);
+    opacity: .78;
+  }
+  .stat.paid-stat .paid-sub {
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 4px;
+    opacity: .95;
+    letter-spacing: .01em;
+  }
 
   .calendar { background: var(--card); border-radius: 16px; padding: 14px; box-shadow: var(--shadow); transition: background .2s; }
   .weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 8px; }
@@ -224,7 +248,15 @@
   .day.off .hours:hover, .day.holiday .hours:hover { background: transparent; }
   .day.off .hours:focus, .day.holiday .hours:focus { background: transparent; box-shadow: inset 0 0 0 2px var(--accent); }
 
-  .cell-bottom { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
+  /* Фиксированная высота — .hours получает одинаковую высоту во всех ячейках */
+  .cell-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px;
+    height: 16px;
+    flex-shrink: 0;
+  }
   .normlabel { font-size: 10px; color: var(--normlabel-color); white-space: nowrap; overflow: hidden; }
   .pay { font-size: 11px; font-weight: 700; color: var(--green); white-space: nowrap; }
   .pay-plus { color: var(--accent); margin-left: 1px; font-weight: 800; }
@@ -251,38 +283,6 @@
     gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
   }
   .payments-header h3 { margin: 0; font-size: 15px; font-weight: 700; }
-  .payment-status-badge {
-    font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 20px;
-    white-space: nowrap; background: var(--hover-bg-2); color: var(--muted);
-  }
-  .payment-status-badge.paid { background: var(--pay-bg); color: var(--green); }
-  .payment-status-badge.partial { background: rgba(224,122,0,.15); color: var(--orange); }
-
-  .payment-progress { margin-bottom: 14px; }
-  .progress-track {
-    height: 10px; background: var(--hover-bg-2); border-radius: 5px;
-    overflow: hidden; margin-bottom: 7px;
-  }
-  .progress-fill {
-    height: 100%; background: linear-gradient(90deg, #1f9d55, #4ce090);
-    border-radius: 5px; transition: width .35s ease; width: 0;
-  }
-  .progress-fill.partial { background: linear-gradient(90deg, #e07a00, #ffa833); }
-  .progress-text {
-    display: flex; justify-content: space-between;
-    font-size: 12px; color: var(--muted); font-weight: 500;
-  }
-  .progress-text strong { color: var(--text); font-weight: 700; }
-
-  .payment-summary-row {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;
-  }
-  .pay-sum-item { padding: 10px 12px; background: var(--hover-bg-2); border-radius: 10px; }
-  .pay-sum-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; margin-bottom: 4px; }
-  .pay-sum-value { font-size: 16px; font-weight: 700; }
-  .pay-sum-item.paid .pay-sum-value { color: var(--green); }
-  .pay-sum-item.remaining .pay-sum-value { color: var(--orange); }
-  .pay-sum-item.remaining.zero .pay-sum-value { color: var(--green); }
 
   .payments-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
   .payment-item {
@@ -500,12 +500,12 @@
     .hours { font-size: 15px; padding: 2px 0; }
     .normlabel { display: none; }
     .pay { font-size: 9px; }
+    .cell-bottom { height: 13px; }
     .payment-pill { padding: 1px 3px; font-size: 9px; }
     .payment-pill .payment-amount { display: none; }
     .export-menu { right: auto; left: 0; }
     .payments-panel { padding: 12px; }
     .payments-header h3 { font-size: 14px; }
-    .pay-sum-value { font-size: 15px; }
     .pay-date { min-width: 62px; }
   }
 </style>
@@ -533,8 +533,6 @@
           <div class="export-menu" id="exportMenu">
             <button data-export="png">📷 Скачать PNG</button>
             <button data-export="jpg">🖼️ Скачать JPG</button>
-            <button data-export="pdf">📄 Скачать PDF</button>
-            <button data-export="share" id="shareItem" hidden>📤 Поделиться</button>
           </div>
         </div>
         <button class="btn primary" id="settingsBtn" title="Настройки">⚙</button>
@@ -549,9 +547,9 @@
       <div class="stat money clickable" id="sPayCard" title="Настройки зарплаты">
         <div class="label">Зарплата <span class="cfg-indicator">⚙</span></div>
         <div class="value" id="sPay">0 ₽</div>
-        <div class="money-status" id="sPayStatus"></div>
       </div>
       <div class="stat paid-stat" id="sPaidCard">
+        <div class="paid-fill" id="sPaidFill"></div>
         <div class="label">Выплачено</div>
         <div class="value" id="sPaid">0 ₽</div>
         <div class="paid-sub" id="sPaidSub"></div>
@@ -566,26 +564,6 @@
     <section class="payments-panel" id="paymentsPanel">
       <div class="payments-header">
         <h3>💰 Выплаты за месяц</h3>
-        <span class="payment-status-badge" id="paymentStatusBadge">—</span>
-      </div>
-
-      <div class="payment-progress">
-        <div class="progress-track"><div class="progress-fill" id="paymentProgressFill"></div></div>
-        <div class="progress-text">
-          <span id="paymentProgressLabel">0 ₽ из 0 ₽</span>
-          <span id="paymentPercentLabel">0%</span>
-        </div>
-      </div>
-
-      <div class="payment-summary-row">
-        <div class="pay-sum-item paid">
-          <div class="pay-sum-label">Выплачено</div>
-          <div class="pay-sum-value" id="paymentTotalPaid">0 ₽</div>
-        </div>
-        <div class="pay-sum-item remaining" id="payRemainingItem">
-          <div class="pay-sum-label">Остаток</div>
-          <div class="pay-sum-value" id="paymentRemaining">0 ₽</div>
-        </div>
       </div>
 
       <div class="payments-list" id="paymentsList"></div>
@@ -854,6 +832,13 @@
     weekend: 'Выходные и праздники'
   };
 
+  // Палитры для сплошной заливки карточки «Выплачено».
+  // 0% → start (красно-оранжевый), 66% → mid (жёлтый), 100% → end (зелёный).
+  const PAID_PALETTE = {
+    light: { start: '#ffab80', mid: '#f5e070', end: '#90d090' },
+    dark:  { start: '#7a3018', mid: '#6a5a18', end: '#205020' }
+  };
+
   const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const fmtH = v => nf.format(Math.round(v * 100) / 100);
   const money = v => nf.format(Math.round(v * 100) / 100) + ' ₽';
@@ -881,6 +866,27 @@
   }
   function formatDateInput(date) {
     return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+  }
+
+  // ── Интерполяция сплошного цвета заливки «Выплачено» ──
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  }
+  function mixColor(c1, c2, t) {
+    const [r1, g1, b1] = hexToRgb(c1);
+    const [r2, g2, b2] = hexToRgb(c2);
+    return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
+  }
+  // 0–66%: красно-оранжевый → жёлтый; 66–100%: жёлтый → зелёный
+  function paidColor(pct, theme) {
+    const p = PAID_PALETTE[theme] || PAID_PALETTE.light;
+    const clamped = Math.max(0, Math.min(100, pct));
+    if (clamped <= 66) return mixColor(p.start, p.mid, clamped / 66);
+    return mixColor(p.mid, p.end, (clamped - 66) / 34);
   }
 
   function getEffectiveRates(cal, year, month) {
@@ -1078,21 +1084,7 @@
                         (salary > 0 && totalPaid >= salary - 0.01);
     const pct = salary > 0 ? Math.min(100, (totalPaid / salary) * 100) : (totalPaid > 0 ? 100 : 0);
 
-    let statusText = '—';
-    let statusClass = '';
-    if (isFullyPaid) {
-      statusText = '✓ Выплачено';
-      statusClass = 'paid';
-    } else if (salary <= 0) {
-      statusText = 'Нет начислений';
-    } else if (totalPaid > 0) {
-      statusText = 'Остаток ' + money(remaining);
-      statusClass = 'partial';
-    } else {
-      statusText = 'Не выплачено';
-    }
-
-    return { salary, totalPaid, remaining, overpaid, isFullyPaid, entries, pct, statusText, statusClass };
+    return { salary, totalPaid, remaining, overpaid, isFullyPaid, entries, pct };
   }
 
   function entryLabel(entry) {
@@ -1270,44 +1262,26 @@
     $('sPay').textContent   = money(pay);
 
     const pi = getPaymentInfo();
-    const card = $('sPaidCard');
-    card.classList.remove('fully', 'partial');
     $('sPaid').textContent = money(pi.totalPaid);
+
+    const pctClamped = Math.max(0, Math.min(100, pi.pct));
     const sub = $('sPaidSub');
-    if (pi.isFullyPaid) {
-      card.classList.add('fully');
-      sub.textContent = '✓ выплачено';
-    } else if (pi.salary > 0 && pi.totalPaid > 0) {
-      card.classList.add('partial');
-      sub.textContent = 'остаток ' + money(pi.remaining);
+    const fill = $('sPaidFill');
+
+    if (pi.salary > 0) {
+      // Прогресс-заливка слева-направо + сплошной цвет по проценту
+      fill.style.clipPath = 'inset(0 ' + (100 - pctClamped) + '% 0 0)';
+      fill.style.backgroundColor = paidColor(pctClamped, currentCal.theme);
+      sub.textContent = (pctClamped >= 99.995) ? '✓' : Math.round(pctClamped) + '%';
     } else {
+      fill.style.clipPath = 'inset(0 100% 0 0)';
+      fill.style.backgroundColor = 'transparent';
       sub.textContent = '—';
     }
-
-    const ms = $('sPayStatus');
-    if (pi.isFullyPaid) ms.textContent = '✓ выплачено';
-    else if (pi.salary > 0 && pi.totalPaid > 0) ms.textContent = 'остаток ' + money(pi.remaining);
-    else if (pi.salary > 0) ms.textContent = 'не выплачено';
-    else ms.textContent = '—';
   }
 
   function renderPayments() {
     const pi = getPaymentInfo();
-
-    const badge = $('paymentStatusBadge');
-    badge.textContent = pi.statusText;
-    badge.className = 'payment-status-badge ' + pi.statusClass;
-
-    const fill = $('paymentProgressFill');
-    fill.style.width = pi.pct + '%';
-    fill.className = 'progress-fill' + (pi.isFullyPaid ? '' : (pi.totalPaid > 0 ? ' partial' : ''));
-    $('paymentProgressLabel').textContent = money(pi.totalPaid) + ' из ' + money(pi.salary);
-    $('paymentPercentLabel').textContent = Math.round(pi.pct) + '%';
-
-    $('paymentTotalPaid').textContent = money(pi.totalPaid);
-    $('paymentRemaining').textContent = money(pi.remaining);
-    $('payRemainingItem').classList.toggle('zero', pi.remaining <= 0.01);
-
     $('fullyPaidChk').checked = !!currentMonth.fullyPaidOverride;
 
     const list = $('paymentsList');
@@ -2082,8 +2056,7 @@
   }
 
   const CDN = {
-    html2canvas: 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
-    jspdf:       'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'
+    html2canvas: 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
   };
   function loadScript(src) {
     return new Promise((res, rej) => {
@@ -2095,28 +2068,82 @@
     });
   }
   let libsPromise = null;
-  function ensureLibs(needPdf) {
+  function ensureLibs() {
     if (!libsPromise) {
       libsPromise = (async () => {
         if (typeof html2canvas === 'undefined') await loadScript(CDN.html2canvas);
-        if (needPdf && typeof window.jspdf === 'undefined') await loadScript(CDN.jspdf);
       })().catch(err => { libsPromise = null; throw err; });
     }
     return libsPromise;
   }
-  async function captureApp() {
-    await ensureLibs(false);
-    const target = document.querySelector('.app');
-    return html2canvas(target, {
-      backgroundColor: getComputedStyle(document.body).backgroundColor || '#fff',
-      scale: Math.max(2, window.devicePixelRatio || 1),
-      useCORS: true, logging: false,
-      windowWidth: target.scrollWidth, windowHeight: target.scrollHeight,
-      ignoreElements: el =>
-        el.classList.contains('export-menu') || el.classList.contains('export-wrap') ||
-        el.classList.contains('comment-popover') || el.classList.contains('overlay')
+
+  function buildExportNode() {
+    const app = document.querySelector('.app');
+    const clone = app.cloneNode(true);
+
+    const listScreen = clone.querySelector('#listScreen');
+    if (listScreen) listScreen.remove();
+
+    const calScreen = clone.querySelector('#calendarScreen');
+    if (calScreen) calScreen.style.display = '';
+
+    if (calScreen && currentCal && currentCal.name) {
+      const nameEl = document.createElement('div');
+      nameEl.textContent = currentCal.name;
+      nameEl.style.cssText = 'font-size:22px;font-weight:700;margin:0 0 14px;padding-top:2px;letter-spacing:-.02em;';
+      calScreen.insertBefore(nameEl, calScreen.firstChild);
+    }
+
+    [
+      '.footnote',
+      '.back-btn',
+      '.actions',
+      '.navbtn',
+      '.day-tools',
+      '.payment-pill',
+      '.pay-actions',
+      '#addPaymentBtn',
+      '.fully-paid-check'
+    ].forEach(sel => {
+      clone.querySelectorAll(sel).forEach(el => el.remove());
     });
+
+    clone.style.paddingBottom = '24px';
+    return clone;
   }
+
+  async function captureApp() {
+    await ensureLibs();
+    const app = document.querySelector('.app');
+    const rect = app.getBoundingClientRect();
+    const bg = getComputedStyle(document.body).backgroundColor || '#fff';
+    const clone = buildExportNode();
+
+    clone.style.position = 'absolute';
+    clone.style.top = '0';
+    clone.style.left = '-10000px';
+    clone.style.width = rect.width + 'px';
+    clone.style.maxWidth = 'none';
+    clone.style.margin = '0';
+    clone.style.backgroundColor = bg;
+
+    document.body.appendChild(clone);
+
+    try {
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      return await html2canvas(clone, {
+        backgroundColor: bg,
+        scale: Math.max(2, window.devicePixelRatio || 1),
+        useCORS: true,
+        logging: false,
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight
+      });
+    } finally {
+      clone.remove();
+    }
+  }
+
   function canvasToBlob(canvas, type, quality) { return new Promise(resolve => canvas.toBlob(resolve, type, quality)); }
   function exportFilename(ext) { return 'zarplata-' + view.year + '-' + pad(view.month + 1) + '.' + ext; }
 
@@ -2125,7 +2152,7 @@
     const old = btn.textContent;
     btn.disabled = true; btn.textContent = 'Готовим…';
     try {
-      if (format === 'pdf') await ensureLibs(true); else await ensureLibs(false);
+      await ensureLibs();
       const canvas = await captureApp();
       if (format === 'png') {
         const blob = await canvasToBlob(canvas, 'image/png');
@@ -2139,16 +2166,6 @@
         ctx.drawImage(canvas, 0, 0);
         const blob = await canvasToBlob(jpg, 'image/jpeg', 0.92);
         await saveFile(blob, exportFilename('jpg'));
-      } else if (format === 'pdf') {
-        const { jsPDF } = window.jspdf;
-        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
-        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
-        const pdfBlob = pdf.output('blob');
-        await saveFile(pdfBlob, exportFilename('pdf'));
-      } else if (format === 'share') {
-        const blob = await canvasToBlob(canvas, 'image/png');
-        await saveFile(blob, exportFilename('png'), { preferShare: true });
       }
     } catch (e) {
       alert('Экспорт не удался: ' + (e && e.message ? e.message : e));
@@ -2156,12 +2173,7 @@
       btn.disabled = false; btn.textContent = old;
     }
   }
-  try {
-    if (navigator.canShare) {
-      const test = new File([new Blob(['x'])], 'x.png', { type: 'image/png' });
-      if (navigator.canShare({ files: [test] })) $('shareItem').hidden = false;
-    }
-  } catch (e) {}
+
   const exportBtn = $('exportBtn'), exportMenu = $('exportMenu');
   exportBtn.onclick = e => { e.stopPropagation(); exportMenu.classList.toggle('show'); };
   document.addEventListener('click', e => { if (!e.target.closest('.export-wrap')) exportMenu.classList.remove('show'); });
