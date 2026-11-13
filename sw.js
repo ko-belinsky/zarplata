@@ -1,29 +1,29 @@
-const CACHE_VERSION = 'salary-v1.0.1';   // ← МЕНЯЙТЕ ПРИ КАЖДОМ РЕЛИЗЕ
+const CACHE_VERSION = 'salary-v1.0.2';   // ← МЕНЯЙТЕ ПРИ КАЖДОМ РЕЛИЗЕ
 const CACHE = `salary-${CACHE_VERSION}`;
 
 const ASSETS = [
     './',
-    './index.html',
-    './manifest.json',
-    './icons/icon-192.png',
-    './icons/icon-512.png'
+'./index.html',
+'./manifest.json',
+'./icons/icon-192.png',
+'./icons/icon-512.png'
 ];
 
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE)
-            .then(cache => cache.addAll(ASSETS))
-            .then(() => self.skipWaiting())
+        .then(cache => cache.addAll(ASSETS))
+        .then(() => self.skipWaiting())
     );
 });
 
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys()
-            .then(keys => Promise.all(
-                keys.filter(k => k !== CACHE).map(k => caches.delete(k))
-            ))
-            .then(() => self.clients.claim())
+        .then(keys => Promise.all(
+            keys.filter(k => k !== CACHE).map(k => caches.delete(k))
+        ))
+        .then(() => self.clients.claim())
     );
 });
 
@@ -35,16 +35,16 @@ self.addEventListener('fetch', event => {
     if (req.mode === 'navigate') {
         event.respondWith(
             fetch(req)
-                .then(response => {
-                    // Кэшируем свежий HTML на случай офлайна
-                    const copy = response.clone();
-                    caches.open(CACHE).then(cache => cache.put(req, copy));
-                    return response;
-                })
-                .catch(() =>
-                    // Офлайн: сначала пробуем точный URL, потом index.html
-                    caches.match(req).then(r => r || caches.match('./index.html'))
-                )
+            .then(response => {
+                // Кэшируем свежий HTML на случай офлайна
+                const copy = response.clone();
+                caches.open(CACHE).then(cache => cache.put(req, copy));
+                return response;
+            })
+            .catch(() =>
+            // Офлайн: сначала пробуем точный URL, потом index.html
+            caches.match(req).then(r => r || caches.match('./index.html'))
+            )
         );
         return;
     }
