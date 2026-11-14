@@ -239,11 +239,11 @@
   .modal-foot.end-only{justify-content:flex-end}
   .field{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
   .field label{font-size:14px}
-  .field input[type=number],.field input[type=text]{width:130px;padding:8px 10px;
+  .field input[type=number],.field input[type=text],.field input[type=password]{width:130px;padding:8px 10px;
     border:1px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit;
     text-align:right;outline:none;background:var(--card);color:var(--text);
     transition:border-color .15s,box-shadow .15s}
-  .field input[type=text]{text-align:left;width:100%}
+  .field input[type=text],.field input[type=password]{text-align:left;width:100%}
   .field input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(59,110,245,.13)}
   .field-label{font-size:13px;font-weight:600;color:var(--text);margin:12px 0 8px}
   .field-label:first-child{margin-top:4px}
@@ -315,6 +315,7 @@
   .chip:hover{background:var(--hover-bg-2)}
   .chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
   .hint{font-size:12px;color:var(--muted);margin:-4px 0 10px}
+  .hint a{color:var(--accent)}
   .check{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;margin-top:4px}
   .check input{width:17px;height:17px;accent-color:var(--accent);cursor:pointer}
   .quick{display:flex;gap:8px;flex-wrap:wrap}
@@ -330,7 +331,6 @@
   .popover-actions{display:flex;justify-content:flex-end}
   .btn-small{padding:6px 12px;font-size:13px}
 
-  /* ── Переключатель ориентации ── */
   .orientation-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .orientation-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:8px;padding:14px 10px;border:1.5px solid var(--line);border-radius:12px;
@@ -345,7 +345,6 @@
   .orientation-icon rect:first-child{transition:fill .15s,fill-opacity .15s}
   .orientation-btn.active .orientation-icon rect:first-child{fill:currentColor;fill-opacity:.12}
 
-  /* ── Раскладка для альбомной ориентации ── */
   [data-orientation="landscape"] .app{max-width:1400px}
 
   @media (min-width:720px){
@@ -403,6 +402,50 @@
     .payments-header h3{font-size:14px}
     .pay-date{min-width:62px}
   }
+
+  .cloud-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background .15s, opacity .15s;
+    margin-right: 4px;
+    user-select: none;
+  }
+  .cloud-indicator.disabled { opacity: .35; }
+  .cloud-indicator.syncing { animation: pulse-cloud 1.2s infinite; }
+  .cloud-indicator.error { color: var(--danger-text); }
+  .cloud-indicator.ok { color: var(--green); }
+  @keyframes pulse-cloud {
+    0% { opacity: .4; }
+    50% { opacity: 1; }
+    100% { opacity: .4; }
+  }
+  .cloud-setup-status {
+    font-size: 12px;
+    padding: 8px 11px;
+    border-radius: 8px;
+    background: var(--hover-bg-2);
+    color: var(--muted);
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+  .cloud-setup-status.ok { color: var(--green); }
+  .cloud-setup-status.error { color: var(--danger-text); }
+  .cloud-warn {
+    font-size: 12px;
+    padding: 8px 11px;
+    border-radius: 8px;
+    background: var(--hover-bg-2);
+    color: var(--muted);
+    margin-top: 8px;
+    line-height: 1.5;
+    border-left: 3px solid var(--orange);
+  }
 </style>
 </head>
 <body>
@@ -411,7 +454,10 @@
   <div id="listScreen" class="screen">
     <header class="list-header">
       <h1>Мои календари</h1>
-      <button class="btn primary" id="listSettingsBtn" title="Настройки">⚙</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="cloud-indicator disabled" id="cloudIndicatorList" title="Облако отключено">☁</span>
+        <button class="btn primary" id="listSettingsBtn" title="Настройки">⚙</button>
+      </div>
     </header>
     <div id="calendarList" class="calendar-list"></div>
     <button class="add-cal-btn" id="addCalendarBtn"><span class="add-icon">+</span>Добавить календарь</button>
@@ -426,6 +472,7 @@
         <button class="navbtn" id="nextMonth" aria-label="Следующий месяц">›</button>
       </div>
       <div class="actions">
+        <span class="cloud-indicator disabled" id="cloudIndicator" title="Облако отключено">☁</span>
         <div class="export-wrap">
           <button class="btn" id="exportBtn">☐ ▾</button>
           <div class="export-menu" id="exportMenu">
@@ -610,8 +657,32 @@
         </div>
       </section>
       <section>
-        <h3>Резервная копия</h3>
-        <p class="hint">Все календари и настройки в одном JSON-файле</p>
+        <h3>Облачная синхронизация 🔒</h3>
+        <p class="hint">Данные шифруются вашим паролем перед отправкой в облако. Провайдер видит только зашифрованный блоб. Пароль нельзя восстановить — если забудете, облачные данные не прочитать (но локальная копия останется).</p>
+        <p class="hint">Создайте бесплатный bin на <a href="https://jsonbin.io" target="_blank" rel="noopener">jsonbin.io</a> и вставьте его ID и Master Key.</p>
+        <div class="field">
+          <label>Bin ID</label>
+          <input type="text" id="cloudBinId" placeholder="например, 65f1a2b3c4d5e6f7a8b9c0d1" autocomplete="off" style="width:100%">
+        </div>
+        <div class="field">
+          <label>Master Key</label>
+          <input type="text" id="cloudMasterKey" placeholder="$2a$10$..." autocomplete="off" style="width:100%">
+        </div>
+        <div class="field">
+          <label>Пароль шифрования</label>
+          <input type="password" id="cloudPassphrase" placeholder="Минимум 6 символов" autocomplete="new-password" style="width:100%">
+        </div>
+        <div class="cloud-warn">⚠ Пароль нельзя восстановить. Запишите его в надёжном месте. Локальный JSON-бекап (ниже) не шифруется, поэтому данные всегда можно спасти через него.</div>
+        <div class="quick" style="margin-top:12px">
+          <button class="btn primary" id="cloudConnectBtn">Подключить</button>
+          <button class="btn" id="cloudSyncBtn" style="display:none">🔄 Синхронизировать</button>
+          <button class="btn danger" id="cloudDisconnectBtn" style="display:none">Отключить</button>
+        </div>
+        <div class="cloud-setup-status" id="cloudSetupStatus"></div>
+      </section>
+      <section>
+        <h3>Резервная копия (без шифрования)</h3>
+        <p class="hint">Все календари и настройки в одном JSON-файле. Файл не шифруется и содержит все данные в открытом виде — храните его в безопасном месте.</p>
         <div class="quick">
           <button class="btn" id="backupBtn">💾 Скачать JSON</button>
           <button class="btn" id="restoreBtn">📂 Загрузить JSON</button>
@@ -711,6 +782,8 @@
     dark:  { start:'#7a3018', mid:'#6a5a18', end:'#205020' }
   };
 
+  const PBKDF2_ITERATIONS = 150000;
+
   const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const fmtH = v => nf.format(Math.round(v * 100) / 100);
   const money = v => nf.format(Math.round(v * 100) / 100) + ' ₽';
@@ -749,6 +822,65 @@
     const c = Math.max(0, Math.min(100, pct));
     return c <= 66 ? mixColor(p.start, p.mid, c/66) : mixColor(p.mid, p.end, (c-66)/34);
   }
+
+  // ─── Web Crypto helpers ────────────────────────────────────
+  function cryptoAvailable() {
+    try {
+      return typeof crypto !== 'undefined' && crypto.subtle &&
+             typeof crypto.subtle.importKey === 'function' &&
+             typeof crypto.subtle.deriveKey === 'function' &&
+             typeof crypto.subtle.encrypt === 'function' &&
+             typeof crypto.subtle.decrypt === 'function';
+    } catch (e) { return false; }
+  }
+  function b64encode(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s);
+  }
+  function b64decode(str) {
+    const bin = atob(str);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function deriveAesKey(passphrase, saltBytes) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw', enc.encode(passphrase), { name: 'PBKDF2' }, false, ['deriveKey']
+    );
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: saltBytes, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+  async function encryptJson(obj, passphrase) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveAesKey(passphrase, salt);
+    const pt = new TextEncoder().encode(JSON.stringify(obj));
+    const ctBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt);
+    return {
+      __encrypted: true,
+      __v: 1,
+      salt: b64encode(salt),
+      iv: b64encode(iv),
+      ct: b64encode(new Uint8Array(ctBuf))
+    };
+  }
+  async function decryptJson(payload, passphrase) {
+    if (!payload || !payload.__encrypted) throw new Error('Not encrypted');
+    const salt = b64decode(payload.salt);
+    const iv = b64decode(payload.iv);
+    const ct = b64decode(payload.ct);
+    const key = await deriveAesKey(passphrase, salt);
+    const ptBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return JSON.parse(new TextDecoder().decode(ptBuf));
+  }
+  // ───────────────────────────────────────────────────────────
 
   function getEffectiveRates(cal, year, month) {
     const R = cal.rates;
@@ -808,14 +940,248 @@
       if (s && s.calendars) {
         s.theme = s.theme || 'light';
         s.orientation = s.orientation || 'portrait';
+        if (!s.cloud) s.cloud = { enabled: false, binId: '', masterKey: '', passphrase: '', lastSync: null };
+        // Совместимость со старой версией без пароля
+        if (s.cloud.enabled && !s.cloud.passphrase) s.cloud.enabled = false;
+        if (!s.lastModified) s.lastModified = Date.now();
         return s;
       }
     } catch (e) {}
-    return { calendars: {}, theme: 'light', orientation: 'portrait' };
+    return {
+      calendars: {},
+      theme: 'light',
+      orientation: 'portrait',
+      cloud: { enabled: false, binId: '', masterKey: '', passphrase: '', lastSync: null },
+      lastModified: Date.now()
+    };
   }
+
   function saveState() {
+    state.lastModified = Date.now();
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    scheduleCloudSave();
+  }
+  // Сохранить без отметки lastModified и без отправки в облако
+  function saveLocalOnly() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   }
+
+  // ─── CLOUD SYNC ────────────────────────────────────────────
+  let cloudSaveTimer = null;
+  let cloudSyncing = false;
+
+  function cloudConfigured() {
+    return !!(state.cloud && state.cloud.enabled && state.cloud.binId && state.cloud.masterKey && state.cloud.passphrase);
+  }
+
+  function scheduleCloudSave() {
+    if (!cloudConfigured()) return;
+    if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(() => {
+      cloudSaveTimer = null;
+      cloudSaveToRemote();
+    }, 2000);
+  }
+
+  async function cloudSaveToRemote() {
+    if (cloudSyncing) return;
+    if (!cloudConfigured()) return;
+    if (!cryptoAvailable()) { updateCloudIndicators('error'); return; }
+    const { binId, masterKey, passphrase } = state.cloud;
+
+    cloudSyncing = true;
+    updateCloudIndicators('syncing');
+    try {
+      const payload = {
+        calendars: state.calendars,
+        theme: state.theme,
+        orientation: state.orientation,
+        lastModified: state.lastModified || Date.now()
+      };
+      const encrypted = await encryptJson(payload, passphrase);
+      const res = await fetch('https://api.jsonbin.io/v3/b/' + binId, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': masterKey
+        },
+        body: JSON.stringify(encrypted)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      state.cloud.lastSync = Date.now();
+      saveLocalOnly();
+      updateCloudIndicators('ok');
+      updateCloudSetupUI();
+    } catch (e) {
+      console.warn('Cloud save failed:', e);
+      updateCloudIndicators('error');
+    } finally {
+      cloudSyncing = false;
+    }
+  }
+
+  // Возвращает { status: 'ok'|'empty'|'decrypt_failed'|'error'|'disabled', data?, remoteModified?, error? }
+  async function cloudLoadFromRemote() {
+    if (!cloudConfigured()) return { status: 'disabled' };
+    if (!cryptoAvailable()) return { status: 'error', error: 'Шифрование недоступно (нужен HTTPS/localhost)' };
+    const { binId, masterKey, passphrase } = state.cloud;
+    try {
+      const res = await fetch('https://api.jsonbin.io/v3/b/' + binId + '/latest', {
+        headers: { 'X-Master-Key': masterKey }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      const remote = json.record || json;
+
+      if (!remote || typeof remote !== 'object') return { status: 'empty' };
+
+      let remoteData;
+      if (remote.__encrypted) {
+        try {
+          remoteData = await decryptJson(remote, passphrase);
+        } catch (e) {
+          return { status: 'decrypt_failed', error: e.message || 'Неверный пароль' };
+        }
+      } else if (remote.calendars) {
+        // Миграция: облако содержит старый незашифрованный формат
+        remoteData = remote;
+      } else {
+        return { status: 'empty' };
+      }
+
+      if (!remoteData.calendars) return { status: 'error', error: 'Некорректные данные в облаке' };
+      return { status: 'ok', data: remoteData, remoteModified: remoteData.lastModified || 0 };
+    } catch (e) {
+      return { status: 'error', error: e.message || String(e) };
+    }
+  }
+
+  function applyRemoteToLocal(remoteData) {
+    const cloudBackup = state.cloud;
+    state = {
+      calendars: remoteData.calendars || {},
+      theme: remoteData.theme || 'light',
+      orientation: remoteData.orientation || 'portrait',
+      cloud: cloudBackup,
+      lastModified: remoteData.lastModified || Date.now()
+    };
+    saveLocalOnly();
+    applyTheme();
+    applyOrientation();
+  }
+
+  function renderCurrentScreen() {
+    if (currentCalId && state.calendars[currentCalId]) {
+      currentCal = state.calendars[currentCalId];
+      renderCalendar();
+    } else if (currentCalId) {
+      navigate('/');
+    } else {
+      renderList();
+    }
+  }
+
+  async function syncNow(interactive) {
+    if (!cloudConfigured()) {
+      if (interactive) alert('Облако не настроено.');
+      return;
+    }
+    updateCloudIndicators('syncing');
+    const result = await cloudLoadFromRemote();
+
+    if (result.status === 'empty') {
+      await cloudSaveToRemote();
+      updateCloudIndicators('ok');
+      return;
+    }
+    if (result.status === 'decrypt_failed') {
+      if (interactive) alert('Не удалось расшифровать облачные данные. Проверьте пароль.\n\nДанные в облаке НЕ изменены. Локальная копия цела.');
+      updateCloudIndicators('error');
+      return;
+    }
+    if (result.status === 'error') {
+      if (interactive) alert('Ошибка загрузки: ' + result.error);
+      updateCloudIndicators('error');
+      return;
+    }
+    // status === 'ok'
+    const remoteNewer = (result.remoteModified || 0) > (state.lastModified || 0);
+    if (remoteNewer) {
+      if (!interactive) {
+        applyRemoteToLocal(result.data);
+        renderCurrentScreen();
+        updateCloudIndicators('ok');
+        return;
+      }
+      const remoteDate = new Date(result.remoteModified).toLocaleString();
+      const localDate = new Date(state.lastModified).toLocaleString();
+      if (confirm('Облачные данные новее.\n\nОблако: ' + remoteDate + '\nЛокально: ' + localDate + '\n\nOK — загрузить облачные данные.\nОтмена — оставить локальные и перезаписать облако.')) {
+        applyRemoteToLocal(result.data);
+        renderCurrentScreen();
+        updateCloudIndicators('ok');
+        return;
+      }
+      // Пользователь выбрал локальные — перезаписываем облако
+      await cloudSaveToRemote();
+      updateCloudIndicators('ok');
+      return;
+    }
+    if ((result.remoteModified || 0) < (state.lastModified || 0)) {
+      if (interactive) {
+        const remoteDate = new Date(result.remoteModified || 0).toLocaleString();
+        const localDate = new Date(state.lastModified).toLocaleString();
+        if (confirm('Локальные данные новее.\n\nЛокально: ' + localDate + '\nОблако: ' + remoteDate + '\n\nOK — оставить локальные и перезаписать облако.\nОтмена — загрузить облачные данные.')) {
+          await cloudSaveToRemote();
+          updateCloudIndicators('ok');
+          return;
+        }
+        applyRemoteToLocal(result.data);
+        renderCurrentScreen();
+        updateCloudIndicators('ok');
+        return;
+      }
+      await cloudSaveToRemote();
+      updateCloudIndicators('ok');
+      return;
+    }
+    // Равные — ничего
+    updateCloudIndicators('ok');
+  }
+
+  function updateCloudIndicators(mode) {
+    const els = [$('cloudIndicator'), $('cloudIndicatorList')].filter(Boolean);
+    els.forEach(el => {
+      el.classList.remove('disabled', 'syncing', 'error', 'ok');
+      if (!cloudConfigured()) {
+        el.classList.add('disabled');
+        el.textContent = '☁';
+        el.title = 'Облако отключено';
+        return;
+      }
+      if (mode === 'syncing') {
+        el.classList.add('syncing');
+        el.textContent = '⏳';
+        el.title = 'Синхронизация…';
+      } else if (mode === 'error') {
+        el.classList.add('error');
+        el.textContent = '⚠';
+        el.title = 'Ошибка синхронизации';
+      } else {
+        el.classList.add('ok');
+        el.textContent = '🔒';
+        el.title = '🔒 Зашифровано и синхронизировано' +
+          (state.cloud.lastSync ? ' · ' + new Date(state.cloud.lastSync).toLocaleTimeString() : '');
+      }
+    });
+  }
+
+  async function initCloud() {
+    updateCloudIndicators();
+    if (cloudConfigured()) {
+      await syncNow(false);
+    }
+  }
+  // ───────────────────────────────────────────────────────────
 
   function getMonthData(cal, year, month) {
     const key = year + '-' + pad(month+1);
@@ -955,8 +1321,6 @@
   function applyOrientation() {
     const o = currentOrientation();
     document.documentElement.setAttribute('data-orientation', o);
-    // Best-effort: попробовать зафиксировать физическую ориентацию.
-    // Работает только в некоторых браузерах и обычно требует fullscreen.
     try {
       if (screen.orientation && typeof screen.orientation.lock === 'function') {
         const p = screen.orientation.lock(o);
@@ -1257,9 +1621,112 @@
     updateOrientationChips();
     $('calendarColorsBlock').style.display = currentCal ? '' : 'none';
     if (currentCal) updateColorInputs();
+    updateCloudSetupUI();
     $('settingsOverlay').classList.add('show');
     openModals.add('settingsOverlay');
   }
+
+  // ─── Cloud setup UI ────────────────────────────────────────
+  function updateCloudSetupUI() {
+    const connected = cloudConfigured();
+    $('cloudBinId').value = state.cloud.binId || '';
+    $('cloudMasterKey').value = state.cloud.masterKey || '';
+    $('cloudPassphrase').value = state.cloud.passphrase || '';
+    $('cloudConnectBtn').textContent = connected ? 'Применить' : 'Подключить';
+    $('cloudSyncBtn').style.display = connected ? '' : 'none';
+    $('cloudDisconnectBtn').style.display = connected ? '' : 'none';
+    const el = $('cloudSetupStatus');
+    if (connected) {
+      el.className = 'cloud-setup-status ok';
+      el.innerHTML = '🔒 Облако подключено, данные шифруются паролем.<br>Последняя синхронизация: ' +
+        (state.cloud.lastSync ? new Date(state.cloud.lastSync).toLocaleString() : '—');
+    } else {
+      el.className = 'cloud-setup-status';
+      el.textContent = 'Облако не подключено. Данные хранятся только на этом устройстве.';
+    }
+  }
+
+  $('cloudConnectBtn').onclick = async () => {
+    const binId = ($('cloudBinId').value || '').trim();
+    const masterKey = ($('cloudMasterKey').value || '').trim();
+    const passphrase = ($('cloudPassphrase').value || '');
+
+    if (!binId || !masterKey) {
+      alert('Заполните Bin ID и Master Key.');
+      return;
+    }
+    if (passphrase.length < 6) {
+      alert('Пароль шифрования должен содержать минимум 6 символов.');
+      return;
+    }
+    if (!cryptoAvailable()) {
+      alert('Шифрование недоступно в этом браузере. Используйте HTTPS или localhost.');
+      return;
+    }
+
+    const wasConnected = cloudConfigured();
+    const credentialsChanged = wasConnected && (state.cloud.binId !== binId || state.cloud.masterKey !== masterKey);
+    const passphraseChanged = wasConnected && state.cloud.passphrase !== passphrase;
+
+    // Смена только пароля — перешифровать и перезаписать облако
+    if (wasConnected && passphraseChanged && !credentialsChanged) {
+      if (!confirm('Сменить пароль шифрования?\n\nОблачные данные будут перезаписаны локальными и зашифрованы новым паролем. Убедитесь, что локальные данные актуальны.')) return;
+      state.cloud.passphrase = passphrase;
+      saveLocalOnly();
+      await cloudSaveToRemote();
+      updateCloudSetupUI();
+      return;
+    }
+
+    // Новое подключение или смена bin/key — сначала сохраняем учётные данные, потом sync
+    state.cloud = {
+      enabled: true,
+      binId, masterKey, passphrase,
+      lastSync: wasConnected ? state.cloud.lastSync : null
+    };
+    saveLocalOnly();
+    updateCloudSetupUI();
+    updateCloudIndicators('syncing');
+
+    const result = await cloudLoadFromRemote();
+
+    if (result.status === 'empty') {
+      await cloudSaveToRemote();
+    } else if (result.status === 'decrypt_failed') {
+      alert('Не удалось расшифровать облачные данные.\n\nПроверьте пароль. Данные в облаке НЕ изменены.');
+    } else if (result.status === 'error') {
+      alert('Ошибка загрузки: ' + result.error);
+    } else if (result.status === 'ok') {
+      const remoteDate = new Date(result.remoteModified || 0).toLocaleString();
+      const localDate = new Date(state.lastModified || 0).toLocaleString();
+      const remoteNewer = (result.remoteModified || 0) > (state.lastModified || 0);
+      if (remoteNewer) {
+        if (confirm('В облаке есть более новые данные.\n\nОблако: ' + remoteDate + '\nЛокально: ' + localDate + '\n\nOK — загрузить облачные данные.\nОтмена — оставить локальные и перезаписать облако.')) {
+          applyRemoteToLocal(result.data);
+          renderCurrentScreen();
+          await cloudSaveToRemote();
+        } else {
+          await cloudSaveToRemote();
+        }
+      } else {
+        await cloudSaveToRemote();
+      }
+    }
+    updateCloudSetupUI();
+    updateCloudIndicators();
+  };
+
+  $('cloudSyncBtn').onclick = () => { syncNow(true); };
+
+  $('cloudDisconnectBtn').onclick = () => {
+    if (!confirm('Отключить облачную синхронизацию?\n\nДанные останутся на устройстве. В облаке данные сохранятся (зашифрованные), но перестанут обновляться.')) return;
+    state.cloud.enabled = false;
+    state.cloud.lastSync = null;
+    saveState();
+    updateCloudSetupUI();
+    updateCloudIndicators();
+  };
+  // ───────────────────────────────────────────────────────────
 
   function renderRatesSection() {
     const R = getEffectiveRates(currentCal, view.year, view.month);
@@ -1501,7 +1968,6 @@
     };
   });
 
-  // ── Переключатель ориентации ──
   $('orientationToggle').addEventListener('click', e => {
     const btn = e.target.closest('[data-orientation]');
     if (!btn) return;
@@ -1621,7 +2087,6 @@
     renderCalendar();
   };
 
-  // ── Выплаты ──
   function maxDayFor(year, month0) {
     const today = new Date();
     if (year === today.getFullYear() && month0 === today.getMonth()) {
@@ -1974,9 +2439,12 @@
         const data = JSON.parse(ev.target.result);
         if (!data || !data.calendars) throw new Error('неверный формат');
         if (!confirm('Заменить все календари данными из файла?')) return;
+        const cloudBackup = state.cloud;
         state = data;
+        state.cloud = cloudBackup || { enabled: false, binId: '', masterKey: '', passphrase: '', lastSync: null };
         if (!state.theme) state.theme = 'light';
         if (!state.orientation) state.orientation = 'portrait';
+        if (!state.lastModified) state.lastModified = Date.now();
         saveState();
         closeAllModals();
         applyOrientation();
@@ -1991,6 +2459,7 @@
   if (!location.hash) history.replaceState(null, '', '#/');
   applyOrientation();
   route();
+  initCloud();
 })();
 </script>
 <script>
