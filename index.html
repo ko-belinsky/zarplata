@@ -74,8 +74,23 @@
   .add-cal-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(59,110,245,.04)}
   .add-icon{font-size:20px;line-height:1}
 
+  /* ── Шапка календаря ── */
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
     flex-wrap:wrap;margin-bottom:14px}
+
+  /* Книжная ориентация: две строки — back слева + actions справа, месяц по центру снизу */
+  [data-orientation="portrait"] .topbar{
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    grid-template-areas:
+      "back . actions"
+      "month month month";
+    gap:8px;
+  }
+  [data-orientation="portrait"] .topbar > .back-btn{grid-area:back;justify-self:start}
+  [data-orientation="portrait"] .topbar > .month-nav{grid-area:month;justify-self:center}
+  [data-orientation="portrait"] .topbar > .actions{grid-area:actions;justify-self:end;flex-wrap:nowrap}
+
   .back-btn{padding:9px 13px;font-size:16px}
   .month-nav{display:flex;align-items:center;gap:2px;background:var(--card);
     border-radius:12px;padding:4px;box-shadow:var(--shadow);transition:background .2s}
@@ -979,15 +994,11 @@
   function cloudFieldsReady() {
     return !!(state.cloud.binId && state.cloud.masterKey && state.cloud.passphrase && state.cloud.passphrase.length >= 6);
   }
-  function cloudActive() {
-    return !!(state.cloud.enabled && cloudFieldsReady() && !state.cloud.authError);
-  }
 
   function scheduleCloudSave() {
     if (!state.cloud.enabled) return;
     if (state.cloud.authError) return;
     if (!cloudFieldsReady()) return;
-    // Не автосинхронизируем, пока открыт экран настроек — там всё вручную
     const settingsEl = $('settingsOverlay');
     if (settingsEl && settingsEl.classList.contains('show')) return;
 
@@ -1008,7 +1019,6 @@
     updateCloudIndicators('syncing');
 
     try {
-      // 1. Проверяем пароль: читаем текущее облако и пробуем расшифровать
       const verifyRes = await fetch('https://api.jsonbin.io/v3/b/' + state.cloud.binId + '/latest', {
         headers: { 'X-Master-Key': state.cloud.masterKey }
       });
@@ -1020,7 +1030,6 @@
         try {
           await decryptJson(remote, state.cloud.passphrase);
         } catch (e) {
-          // Пароль не совпадает — блокируем автосинхронизацию
           state.cloud.authError = true;
           saveLocalOnly();
           updateCloudIndicators('error');
@@ -1030,7 +1039,6 @@
         }
       }
 
-      // 2. Пароль совпадает (или облако пустое) — сохраняем
       const payload = {
         calendars: state.calendars,
         theme: state.theme,
@@ -1063,7 +1071,6 @@
     }
   }
 
-  // Загрузка из облака по явным учётным данным (для настроек)
   async function fetchRemoteData(binId, masterKey, passphrase) {
     if (!binId || !masterKey || !passphrase) return { status: 'disabled' };
     if (!cryptoAvailable()) return { status: 'error', error: 'Шифрование недоступно (нужен HTTPS/localhost)' };
@@ -1207,7 +1214,6 @@
       updateCloudIndicators('ok');
       return;
     }
-    // network error — не блокируем, но и не синхронизируем
     updateCloudIndicators('error');
   }
   // ───────────────────────────────────────────────────────────
@@ -1650,7 +1656,6 @@
     updateOrientationChips();
     $('calendarColorsBlock').style.display = currentCal ? '' : 'none';
     if (currentCal) updateColorInputs();
-    // Заполняем поля облака из сохранённого состояния
     $('cloudBinId').value = state.cloud.binId || '';
     $('cloudMasterKey').value = state.cloud.masterKey || '';
     $('cloudPassphrase').value = state.cloud.passphrase || '';
@@ -1684,12 +1689,10 @@
     }
   }
 
-  // Обновляем кнопки при вводе в поля
   ['cloudBinId', 'cloudMasterKey', 'cloudPassphrase'].forEach(id => {
     $(id).addEventListener('input', updateCloudSetupUI);
   });
 
-  // ── Кнопка «Загрузить» ──
   $('cloudLoadBtn').onclick = async () => {
     const binId = ($('cloudBinId').value || '').trim();
     const masterKey = ($('cloudMasterKey').value || '').trim();
@@ -1720,7 +1723,6 @@
         return;
       }
       if (result.status === 'empty') {
-        // Облако пустое — активируем и сохраним локальные данные
         state.cloud.binId = binId;
         state.cloud.masterKey = masterKey;
         state.cloud.passphrase = passphrase;
@@ -1734,7 +1736,6 @@
         return;
       }
 
-      // status === 'ok'
       state.cloud.binId = binId;
       state.cloud.masterKey = masterKey;
       state.cloud.passphrase = passphrase;
@@ -1751,7 +1752,6 @@
     }
   };
 
-  // ── Кнопка «Сохранить» ──
   $('cloudSaveBtn').onclick = async () => {
     const binId = ($('cloudBinId').value || '').trim();
     const masterKey = ($('cloudMasterKey').value || '').trim();
@@ -1771,7 +1771,6 @@
     btn.disabled = true; btn.textContent = 'Сохраняем…';
 
     try {
-      // 1. Смотрим текущее состояние облака
       let remote = null;
       try {
         const res = await fetch('https://api.jsonbin.io/v3/b/' + binId + '/latest', {
@@ -1785,7 +1784,6 @@
         return;
       }
 
-      // 2. Если облако непустое — проверяем пароль
       const isEmpty = !remote || typeof remote !== 'object' || (!remote.__encrypted && !remote.calendars);
       if (!isEmpty && remote.__encrypted) {
         let passwordOk = false;
@@ -1812,7 +1810,6 @@
         }
       }
 
-      // 3. Сохраняем локальные данные
       state.cloud.binId = binId;
       state.cloud.masterKey = masterKey;
       state.cloud.passphrase = passphrase;
@@ -1821,7 +1818,6 @@
       state.lastModified = Date.now();
       saveLocalOnly();
 
-      // 4. Пушим в облако
       const payload = {
         calendars: state.calendars,
         theme: state.theme,
@@ -1852,7 +1848,6 @@
     }
   };
 
-  // ── Кнопка «Отключить» ──
   $('cloudDisconnectBtn').onclick = () => {
     if (!confirm('Отключить облачную синхронизацию?\n\nДанные останутся на устройстве. В облаке данные сохранятся, но перестанут обновляться.')) return;
     state.cloud.enabled = false;
@@ -2606,4 +2601,4 @@ if ('serviceWorker' in navigator) {
 }
 </script>
 </body>
-</html>
+ </html>
