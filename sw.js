@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'salary-v1.0.5';   // ← МЕНЯЙТЕ ПРИ КАЖДОМ РЕЛИЗЕ
+const CACHE_VERSION = 'salary-v1.0.6';   // ← МЕНЯЙТЕ ПРИ КАЖДОМ РЕЛИЗЕ
 const CACHE = `salary-${CACHE_VERSION}`;
 
 const ASSETS = [
