@@ -3,9 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <title>Зарплата</title>
 <meta name="theme-color" content="#3b6ef5">
 <meta name="mobile-web-app-capable" content="yes">
@@ -77,9 +74,11 @@
   .add-cal-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(59,110,245,.04)}
   .add-icon{font-size:20px;line-height:1}
 
+  /* ── Шапка календаря ── */
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;
     flex-wrap:wrap;margin-bottom:14px}
 
+  /* Книжная ориентация: две строки — back слева + actions справа, месяц по центру снизу */
   [data-orientation="portrait"] .topbar{
     display:grid;
     grid-template-columns:auto 1fr auto;
@@ -674,26 +673,25 @@
       </section>
       <section>
         <h3>Облачная синхронизация 🔒</h3>
-        <p class="hint">Данные шифруются паролем перед отправкой в облако. Создайте бесплатный bin на <a href="https://jsonbin.io" target="_blank" rel="noopener">jsonbin.io</a>.</p>
+        <p class="hint">Данные шифруются вашим паролем перед отправкой в облако. Провайдер видит только зашифрованный блоб. Пароль нельзя восстановить.</p>
+        <p class="hint">Создайте бесплатный bin на <a href="https://jsonbin.io" target="_blank" rel="noopener">jsonbin.io</a> и вставьте его ID и Master Key.</p>
         <div class="field">
           <label>Bin ID</label>
-          <input type="text" id="cloudBinId" autocomplete="off" style="width:100%">
+          <input type="text" id="cloudBinId" placeholder="65f1a2b3c4d5e6f7a8b9c0d1" autocomplete="off" style="width:100%">
         </div>
         <div class="field">
           <label>Master Key</label>
-          <input type="text" id="cloudMasterKey" autocomplete="off" style="width:100%">
+          <input type="text" id="cloudMasterKey" placeholder="$2a$10$..." autocomplete="off" style="width:100%">
         </div>
         <div class="field">
           <label>Пароль шифрования</label>
           <input type="password" id="cloudPassphrase" placeholder="Минимум 6 символов" autocomplete="new-password" style="width:100%">
         </div>
-        <div class="cloud-warn">⚠ Пароль нельзя восстановить. Локальный JSON-бекап (ниже) не шифруется — сохраните его на случай потери пароля.</div>
+        <div class="cloud-warn">⚠ Пароль нельзя восстановить. Запишите его в надёжном месте. Локальный JSON-бекап (ниже) не шифруется.</div>
         <div class="quick" style="margin-top:12px">
-          <button class="btn primary" id="cloudConnectBtn">Подключить</button>
-          <button class="btn primary" id="cloudSyncBtn" style="display:none">🔄 Синхронизировать</button>
-          <button class="btn" id="cloudLoadBtn" style="display:none">📥 Заменить из облака</button>
+          <button class="btn primary" id="cloudLoadBtn" style="display:none">📥 Загрузить</button>
+          <button class="btn primary" id="cloudSaveBtn" style="display:none">💾 Сохранить</button>
           <button class="btn danger" id="cloudDisconnectBtn" style="display:none">Отключить</button>
-          <button class="btn" id="hardResetBtn" title="Снимает service worker и перезагружает страницу">🔄 Сбросить кэш</button>
         </div>
         <div class="cloud-setup-status" id="cloudSetupStatus"></div>
       </section>
@@ -798,9 +796,8 @@
     light: { start:'#ffab80', mid:'#f5e070', end:'#90d090' },
     dark:  { start:'#7a3018', mid:'#6a5a18', end:'#205020' }
   };
+
   const PBKDF2_ITERATIONS = 150000;
-  const SYNC_DEBOUNCE_MS = 400;
-  const SYNC_POLL_MS = 10000;
 
   const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const fmtH = v => nf.format(Math.round(v * 100) / 100);
@@ -828,6 +825,7 @@
     return '#' + h(r) + h(g) + h(b);
   }
   function formatDateInput(d) { return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
+
   function hexToRgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n>>16)&255,(n>>8)&255,n&255]; }
   function rgbToHex(r,g,b) { return '#' + [r,g,b].map(v => Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join(''); }
   function mixColor(c1,c2,t) {
@@ -840,6 +838,7 @@
     return c <= 66 ? mixColor(p.start, p.mid, c/66) : mixColor(p.mid, p.end, (c-66)/34);
   }
 
+  // ─── Web Crypto helpers ────────────────────────────────────
   function cryptoAvailable() {
     try {
       return typeof crypto !== 'undefined' && crypto.subtle &&
@@ -869,7 +868,8 @@
       { name: 'PBKDF2', salt: saltBytes, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
       keyMaterial,
       { name: 'AES-GCM', length: 256 },
-      false, ['encrypt', 'decrypt']
+      false,
+      ['encrypt', 'decrypt']
     );
   }
   async function encryptJson(obj, passphrase) {
@@ -878,7 +878,13 @@
     const key = await deriveAesKey(passphrase, salt);
     const pt = new TextEncoder().encode(JSON.stringify(obj));
     const ctBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt);
-    return { __encrypted: true, __v: 4, salt: b64encode(salt), iv: b64encode(iv), ct: b64encode(new Uint8Array(ctBuf)) };
+    return {
+      __encrypted: true,
+      __v: 1,
+      salt: b64encode(salt),
+      iv: b64encode(iv),
+      ct: b64encode(new Uint8Array(ctBuf))
+    };
   }
   async function decryptJson(payload, passphrase) {
     if (!payload || !payload.__encrypted) throw new Error('Not encrypted');
@@ -889,6 +895,7 @@
     const ptBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
     return JSON.parse(new TextDecoder().decode(ptBuf));
   }
+  // ───────────────────────────────────────────────────────────
 
   function getEffectiveRates(cal, year, month) {
     const R = cal.rates;
@@ -917,12 +924,14 @@
       rawNorm: r.norm, rawOt1: r.ot1, rawOt2: r.ot2, rawWeekend: r.weekend
     };
   }
+
   function parseShiftPattern(s) {
     const m = s && String(s).match(/(\d+)\s*[\/\\\-]\s*(\d+)/);
     if (!m) return null;
     const w = +m[1], r = +m[2];
     return (w >= 0 && r >= 0 && w + r > 0) ? [w, r] : null;
   }
+
   function isShiftWorkDate(date, shift) {
     const [w, r] = shift.pattern;
     const cycle = w + r;
@@ -934,6 +943,7 @@
     const pos = (((Math.round((cur - start) / 86400000) % cycle) + cycle) % cycle);
     return pos < w;
   }
+
   function isScheduleRestDay(cal, d) {
     const S = cal.schedule;
     return S.mode === 'shift' ? !isShiftWorkDate(d, S.shift) : S.workdays.indexOf(d.getDay()) === -1;
@@ -952,159 +962,185 @@
         if (!('passphrase' in s.cloud)) s.cloud.passphrase = '';
         if (!('lastSync' in s.cloud)) s.cloud.lastSync = null;
         if (!('authError' in s.cloud)) s.cloud.authError = false;
-        delete s.cloud.lastSyncVersion;
-        delete s.cloud.dirty;
-        delete s.lastModifiedBy;
         if (!s.lastModified) s.lastModified = Date.now();
         return s;
       }
     } catch (e) {}
     return {
-      calendars: {}, theme: 'light', orientation: 'portrait',
+      calendars: {},
+      theme: 'light',
+      orientation: 'portrait',
       cloud: { enabled: false, binId: '', masterKey: '', passphrase: '', lastSync: null, authError: false },
       lastModified: Date.now()
     };
   }
 
-  function saveLocal() {
+  function saveLocalOnly() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   }
+
   function saveState() {
     state.lastModified = Date.now();
-    saveLocal();
-    scheduleSync();
+    saveLocalOnly();
+    scheduleCloudSave();
   }
 
   // ─── CLOUD SYNC ────────────────────────────────────────────
-  let syncInProgress = false;
-  let syncPending = false;
-  let syncDebounceTimer = null;
-  let syncRetryTimer = null;
-  let pendingRender = false;
-  let pollTimer = null;
+  let cloudSaveTimer = null;
+  let cloudSyncing = false;
+  let cloudPendingSave = false;
+  let authErrorNotified = false;
 
-  function cloudConfigured() {
-    const c = state.cloud;
-    return !!(c && c.enabled && c.binId && c.masterKey && c.passphrase && c.passphrase.length >= 6);
+  function cloudFieldsReady() {
+    return !!(state.cloud.binId && state.cloud.masterKey && state.cloud.passphrase && state.cloud.passphrase.length >= 6);
   }
 
-  function scheduleSync(delay) {
-    if (!cloudConfigured()) return;
-    if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
-    syncDebounceTimer = setTimeout(() => {
-      syncDebounceTimer = null;
-      performSync();
-    }, delay != null ? delay : SYNC_DEBOUNCE_MS);
+  function scheduleCloudSave() {
+    if (!state.cloud.enabled) return;
+    if (state.cloud.authError) return;
+    if (!cloudFieldsReady()) return;
+    const settingsEl = $('settingsOverlay');
+    if (settingsEl && settingsEl.classList.contains('show')) return;
+
+    if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(() => {
+      cloudSaveTimer = null;
+      cloudSaveToRemote();
+    }, 2000);
   }
 
-  async function fetchRemoteRaw() {
-    const res = await fetch('https://api.jsonbin.io/v3/b/' + state.cloud.binId + '/latest', {
-      headers: {
-        'X-Master-Key': state.cloud.masterKey,
-        'X-Bin-Meta': 'false'
-      },
-      cache: 'no-store'
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const json = await res.json();
-    return json.record || json;
+  async function cloudSaveToRemote() {
+    if (!state.cloud.enabled || state.cloud.authError) return;
+    if (!cloudFieldsReady()) return;
+    if (!cryptoAvailable()) { updateCloudIndicators('error'); return; }
+    if (cloudSyncing) { cloudPendingSave = true; return; }
+
+    cloudSyncing = true;
+    updateCloudIndicators('syncing');
+
+    try {
+      const verifyRes = await fetch('https://api.jsonbin.io/v3/b/' + state.cloud.binId + '/latest', {
+        headers: { 'X-Master-Key': state.cloud.masterKey }
+      });
+      if (!verifyRes.ok) throw new Error('HTTP ' + verifyRes.status);
+      const verifyJson = await verifyRes.json();
+      const remote = verifyJson.record || verifyJson;
+
+      if (remote && typeof remote === 'object' && remote.__encrypted) {
+        let remoteData;
+        try {
+          remoteData = await decryptJson(remote, state.cloud.passphrase);
+        } catch (e) {
+          state.cloud.authError = true;
+          saveLocalOnly();
+          updateCloudIndicators('error');
+          showAuthErrorNotification();
+          cloudSyncing = false;
+          return;
+        }
+
+        // НОВОЕ: если облако новее — не перезаписываем
+        const remoteModified = remoteData.lastModified || 0;
+        const localModified = state.lastModified || 0;
+        if (remoteModified > localModified) {
+          alert(
+            '⚠ В облаке более свежие данные с другого устройства.\n\n' +
+            'Автосохранение остановлено, данные в облаке НЕ изменены.\n\n' +
+            'Откройте Настройки → Облачная синхронизация и нажмите «Загрузить», чтобы получить актуальные данные.'
+          );
+          state.cloud.authError = true;
+          saveLocalOnly();
+          updateCloudIndicators('error');
+          cloudSyncing = false;
+          return;
+        }
+      }
+
+      // Пароль совпал, локальные данные не старее — можно пушить
+      const payload = {
+        calendars: state.calendars,
+        theme: state.theme,
+        orientation: state.orientation,
+        lastModified: state.lastModified || Date.now()
+      };
+      const encrypted = await encryptJson(payload, state.cloud.passphrase);
+      const saveRes = await fetch('https://api.jsonbin.io/v3/b/' + state.cloud.binId, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': state.cloud.masterKey
+        },
+        body: JSON.stringify(encrypted)
+      });
+      if (!saveRes.ok) throw new Error('HTTP ' + saveRes.status);
+
+      state.cloud.lastSync = Date.now();
+      saveLocalOnly();
+      updateCloudIndicators('ok');
+    } catch (e) {
+      console.warn('Cloud save failed:', e);
+      updateCloudIndicators('error');
+    } finally {
+      cloudSyncing = false;
+      if (cloudPendingSave) {
+        cloudPendingSave = false;
+        scheduleCloudSave();
+      }
+    }
   }
 
-  async function pushToCloud() {
-    const payload = {
-      __v: 4,
-      calendars: state.calendars,
-      theme: state.theme,           // ← добавить
-      orientation: state.orientation, // ← добавить
-      lastModified: Date.now()
+  async function fetchRemoteData(binId, masterKey, passphrase) {
+    if (!binId || !masterKey || !passphrase) return { status: 'disabled' };
+    if (!cryptoAvailable()) return { status: 'error', error: 'Шифрование недоступно (нужен HTTPS/localhost)' };
+    try {
+      const res = await fetch('https://api.jsonbin.io/v3/b/' + binId + '/latest', {
+        headers: { 'X-Master-Key': masterKey }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      const remote = json.record || json;
+      if (!remote || typeof remote !== 'object') return { status: 'empty' };
+
+      let remoteData;
+      if (remote.__encrypted) {
+        try {
+          remoteData = await decryptJson(remote, passphrase);
+        } catch (e) {
+          return { status: 'decrypt_failed', error: e.message || 'Неверный пароль' };
+        }
+      } else if (remote.calendars) {
+        remoteData = remote;
+      } else {
+        return { status: 'empty' };
+      }
+      if (!remoteData.calendars) return { status: 'error', error: 'Некорректные данные в облаке' };
+      return { status: 'ok', data: remoteData, remoteModified: remoteData.lastModified || 0 };
+    } catch (e) {
+      return { status: 'error', error: e.message || String(e) };
+    }
+  }
+
+  function applyRemoteToLocal(remoteData) {
+    const cloudBackup = Object.assign({}, state.cloud || {});
+    cloudBackup.authError = false;
+    cloudBackup.lastSync = Date.now();
+    state = {
+      calendars: remoteData.calendars || {},
+      theme: remoteData.theme || 'light',
+      orientation: remoteData.orientation || 'portrait',
+      cloud: cloudBackup,
+      lastModified: remoteData.lastModified || Date.now()
     };
-    state.lastModified = payload.lastModified;
-    const encrypted = await encryptJson(payload, state.cloud.passphrase);
-    const res = await fetch('https://api.jsonbin.io/v3/b/' + state.cloud.binId, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': state.cloud.masterKey
-      },
-      body: JSON.stringify(encrypted)
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return payload.lastModified;
-  }
-
-  // Возвращает число изменённых ключей.
-  function mergeIntoLocal(remoteData, cloudWins) {
-    if (!remoteData || !remoteData.calendars) return 0;
-    if (!state.calendars) state.calendars = {};
-
-    let changed = 0;
-
-    if (cloudWins) {
-      if (remoteData.theme && remoteData.theme !== state.theme) { state.theme = remoteData.theme; changed++; }
-      if (remoteData.orientation && remoteData.orientation !== state.orientation) { state.orientation = remoteData.orientation; changed++; }
+    saveLocalOnly();
+    // ВАЖНО: обновляем currentCal до вызова applyTheme,
+    // иначе CSS-переменные цветов установятся из старых данных
+    if (currentCalId && state.calendars[currentCalId]) {
+      currentCal = state.calendars[currentCalId];
+    } else {
+      currentCal = null;
     }
-
-    const remote = remoteData.calendars;
-    const local = state.calendars;
-
-    for (const calId in remote) {
-      const rCal = remote[calId];
-      if (!local[calId]) { local[calId] = rCal; changed++; continue; }
-      const lCal = local[calId];
-
-      if (cloudWins) {
-        if (rCal.name && lCal.name !== rCal.name) { lCal.name = rCal.name; changed++; }
-        if (rCal.colors && JSON.stringify(lCal.colors) !== JSON.stringify(rCal.colors)) { lCal.colors = rCal.colors; changed++; }
-        if (rCal.rates && JSON.stringify(lCal.rates) !== JSON.stringify(rCal.rates)) { lCal.rates = rCal.rates; changed++; }
-        if (rCal.schedule && JSON.stringify(lCal.schedule) !== JSON.stringify(rCal.schedule)) { lCal.schedule = rCal.schedule; changed++; }
-        if (rCal.premiums && JSON.stringify(lCal.premiums) !== JSON.stringify(rCal.premiums)) { lCal.premiums = rCal.premiums; changed++; }
-      }
-
-      if (!rCal.months) continue;
-      if (!lCal.months) lCal.months = {};
-
-      for (const mk in rCal.months) {
-        const rM = rCal.months[mk];
-        if (!lCal.months[mk]) { lCal.months[mk] = rM; changed++; continue; }
-        const lM = lCal.months[mk];
-
-        if (rM.hours) {
-          if (!lM.hours) lM.hours = {};
-          for (const d in rM.hours) {
-            if (!(d in lM.hours)) { lM.hours[d] = rM.hours[d]; changed++; }
-            else if (lM.hours[d] !== rM.hours[d]) {
-              if (lM.hours[d] === null) continue;    // локально удалено — не восстанавливаем
-              if (cloudWins) { lM.hours[d] = rM.hours[d]; changed++; }
-            }
-          }
-        }
-        if (rM.days) {
-          if (!lM.days) lM.days = {};
-          for (const d in rM.days) {
-            if (!(d in lM.days)) { lM.days[d] = rM.days[d]; changed++; }
-            else if (JSON.stringify(lM.days[d]) !== JSON.stringify(rM.days[d])) {
-              if (lM.days[d] === null) continue;
-              if (cloudWins) { lM.days[d] = rM.days[d]; changed++; }
-            }
-          }
-        }
-        if (rM.payments) {
-          if (!lM.payments) lM.payments = {};
-          for (const id in rM.payments) {
-            if (!(id in lM.payments)) { lM.payments[id] = rM.payments[id]; changed++; }
-            else if (JSON.stringify(lM.payments[id]) !== JSON.stringify(rM.payments[id])) {
-              if (lM.payments[id] === null) continue;
-              if (cloudWins) { lM.payments[id] = rM.payments[id]; changed++; }
-            }
-          }
-        }
-        if (cloudWins && typeof rM.fullyPaidOverride === 'boolean' && rM.fullyPaidOverride !== lM.fullyPaidOverride) {
-          lM.fullyPaidOverride = rM.fullyPaidOverride;
-          changed++;
-        }
-      }
-    }
-    return changed;
+    applyTheme();
+    applyOrientation();
   }
 
   function renderCurrentScreen() {
@@ -1118,120 +1154,26 @@
     }
   }
 
-  function maybeRenderAfterSync(changed) {
-    if (!changed) return;
-    const active = document.activeElement;
-    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-      pendingRender = true;
-    } else {
-      renderCurrentScreen();
-      pendingRender = false;
-    }
-  }
-
-  async function performSync() {
-    if (!cloudConfigured()) return;
-    if (syncInProgress) { syncPending = true; return; }
-    if (!cryptoAvailable()) { setCloudIndicator('error'); return; }
-
-    if (syncRetryTimer) { clearTimeout(syncRetryTimer); syncRetryTimer = null; }
-
-    syncInProgress = true;
-    setCloudIndicator('syncing');
-
-    let anyChange = 0;
-    try {
-      const remoteRaw = await fetchRemoteRaw();
-
-      if (!remoteRaw || typeof remoteRaw !== 'object' || (!remoteRaw.__encrypted && !remoteRaw.calendars)) {
-        await pushToCloud();
-        state.cloud.lastSync = Date.now();
-        state.cloud.authError = false;
-        saveLocal();
-        setCloudIndicator('ok');
-        return;
-      }
-
-      let remoteData;
-      if (remoteRaw.__encrypted) {
-        try {
-          remoteData = await decryptJson(remoteRaw, state.cloud.passphrase);
-        } catch (e) {
-          state.cloud.authError = true;
-          saveLocal();
-          setCloudIndicator('error');
-          return;
-        }
-      } else {
-        remoteData = remoteRaw;
-      }
-      if (!remoteData.calendars) throw new Error('bad cloud data');
-
-      state.cloud.authError = false;
-
-      const remoteModified = remoteData.lastModified || 0;
-      const localModified = state.lastModified || 0;
-      const cloudWins = remoteModified > localModified;
-
-      const changed = mergeIntoLocal(remoteData, cloudWins);
-      anyChange += changed;
-      if (changed) saveLocal();
-
-      if (localModified > remoteModified || changed > 0) {
-        await pushToCloud();
-      } else {
-        state.lastModified = remoteModified;
-      }
-
-      state.cloud.lastSync = Date.now();
-      saveLocal();
-      setCloudIndicator('ok');
-
-      // Если изменились глобальные настройки — применить их в UI
-      if (anyChange) {
-        applyTheme();
-        applyOrientation();
-      }
-
-      if (anyChange) {
-        const active = document.activeElement;
-        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-          pendingRender = true;
-        } else {
-          renderCurrentScreen();
-          pendingRender = false;
-        }
-      }
-    } catch (e) {
-      console.warn('Sync error:', e);
-      setCloudIndicator('error');
-      const msg = e.message || '';
-      if (!/40[13]/.test(msg)) {
-        syncRetryTimer = setTimeout(() => {
-          syncRetryTimer = null;
-          if (cloudConfigured() && !syncInProgress) performSync();
-        }, 5000);
-      }
-    } finally {
-      syncInProgress = false;
-      if (syncPending) { syncPending = false; performSync(); }
-    }
-  }
-
-  function setCloudIndicator(mode) {
+  function updateCloudIndicators(mode) {
     const els = [$('cloudIndicator'), $('cloudIndicatorList')].filter(Boolean);
     els.forEach(el => {
       el.classList.remove('disabled', 'syncing', 'error', 'ok');
-      if (!cloudConfigured()) {
+      if (!state.cloud.enabled) {
         el.classList.add('disabled');
         el.textContent = '☁';
         el.title = 'Облако отключено';
         return;
       }
+      if (!cloudFieldsReady()) {
+        el.classList.add('disabled');
+        el.textContent = '☁';
+        el.title = 'Заполните настройки облака';
+        return;
+      }
       if (state.cloud.authError) {
         el.classList.add('error');
         el.textContent = '⚠';
-        el.title = 'Неверный пароль шифрования';
+        el.title = 'Пароль шифрования не совпадает с облаком. Откройте настройки.';
         return;
       }
       if (mode === 'syncing') {
@@ -1241,38 +1183,114 @@
       } else if (mode === 'error') {
         el.classList.add('error');
         el.textContent = '⚠';
-        el.title = 'Ошибка синхронизации';
+        el.title = 'Ошибка сети';
       } else {
         el.classList.add('ok');
         el.textContent = '🔒';
-        el.title = 'Синхронизировано' +
+        el.title = '🔒 Синхронизировано' +
           (state.cloud.lastSync ? ' · ' + new Date(state.cloud.lastSync).toLocaleTimeString() : '');
       }
     });
   }
 
+  function showAuthErrorNotification() {
+    if (authErrorNotified) return;
+    authErrorNotified = true;
+    setTimeout(() => {
+      alert(
+        '⚠ Ошибка синхронизации: неверный пароль шифрования.\n\n' +
+        'Данные в облаке зашифрованы другим паролем — скорее всего, пароль был изменён на другом устройстве.\n\n' +
+        'Автосинхронизация остановлена, данные в облаке НЕ изменены.\n\n' +
+        'Откройте Настройки → Облачная синхронизация, введите актуальный пароль и нажмите «Загрузить».'
+      );
+    }, 100);
+  }
+
   async function initCloud() {
-    setCloudIndicator();
-    if (!cloudConfigured()) return;
-    await performSync();
-    startPolling();
+    updateCloudIndicators();
+    if (!state.cloud.enabled) return;
+    if (!cloudFieldsReady()) return;
+    if (!cryptoAvailable()) { updateCloudIndicators('error'); return; }
+
+    updateCloudIndicators('syncing');
+    const result = await fetchRemoteData(state.cloud.binId, state.cloud.masterKey, state.cloud.passphrase);
+
+    if (result.status === 'decrypt_failed') {
+      state.cloud.authError = true;
+      saveLocalOnly();
+      updateCloudIndicators('error');
+      showAuthErrorNotification();
+      return;
+    }
+    if (result.status === 'ok') {
+      state.cloud.authError = false;
+      if ((result.remoteModified || 0) > (state.lastModified || 0)) {
+        applyRemoteToLocal(result.data);
+        renderCurrentScreen();
+      } else {
+        state.cloud.lastSync = Date.now();
+        saveLocalOnly();
+      }
+      updateCloudIndicators('ok');
+      return;
+    }
+    if (result.status === 'empty') {
+      state.cloud.authError = false;
+      saveLocalOnly();
+      updateCloudIndicators('ok');
+      return;
+    }
+    updateCloudIndicators('error');
   }
 
-  function startPolling() {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(() => {
-      if (document.hidden) return;
-      if (!cloudConfigured()) return;
-      performSync();
-    }, SYNC_POLL_MS);
+    // ─── Автообновление при возврате во вкладку ─────────────────
+  let cloudCheckInProgress = false;
+  let lastCloudCheck = 0;
+
+  function maybeRefreshFromCloud() {
+    if (cloudCheckInProgress) return;
+    if (document.hidden) return;
+    if (!state.cloud.enabled || state.cloud.authError || !cloudFieldsReady()) return;
+    if (!cryptoAvailable()) return;
+    if (openModals.has('settingsOverlay')) return;
+
+    const nowTs = Date.now();
+    if (nowTs - lastCloudCheck < 5000) return;
+    lastCloudCheck = nowTs;
+
+    checkCloudForUpdates();
   }
 
-  // Автосинхронизация на события
-  window.addEventListener('online', () => scheduleSync(200));
-  window.addEventListener('focus', () => scheduleSync(500));
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) scheduleSync(500);
-  });
+  async function checkCloudForUpdates() {
+    cloudCheckInProgress = true;
+    try {
+      const result = await fetchRemoteData(state.cloud.binId, state.cloud.masterKey, state.cloud.passphrase);
+      if (result.status === 'ok') {
+        state.cloud.authError = false;
+        const remoteModified = result.remoteModified || 0;
+        const localModified = state.lastModified || 0;
+        if (remoteModified > localModified) {
+          // В облаке новее — безопасно подтягиваем
+          applyRemoteToLocal(result.data);
+          renderCurrentScreen();
+        }
+        updateCloudIndicators('ok');
+      } else if (result.status === 'decrypt_failed') {
+        state.cloud.authError = true;
+        saveLocalOnly();
+        updateCloudIndicators('error');
+        showAuthErrorNotification();
+      }
+    } catch (e) {
+      // тихо — сеть моргнула, попробуем в следующий раз
+    } finally {
+      cloudCheckInProgress = false;
+    }
+  }
+
+  document.addEventListener('visibilitychange', maybeRefreshFromCloud);
+  window.addEventListener('focus', maybeRefreshFromCloud);
+
   // ───────────────────────────────────────────────────────────
 
   function getMonthData(cal, year, month) {
@@ -1285,41 +1303,55 @@
     if (typeof m.fullyPaidOverride !== 'boolean') m.fullyPaidOverride = false;
     return m;
   }
+
   function getTotalBonusPercent(cal) {
     return cal.premiums.reduce((s, p) => s + (Number(p.percent) || 0), 0);
   }
+
   function computeMonth(cal, year, month) {
     const data = getMonthData(cal, year, month);
     const daysInMonth = new Date(year, month+1, 0).getDate();
     const npd = Number(cal.schedule.normPerDay) || 0;
     const R = getEffectiveRates(cal, year, month);
     const bonus = 1 + getTotalBonusPercent(cal) / 100;
-    const rNorm = R.norm, rOt1 = R.ot1 != null ? R.ot1 : R.norm, rOt2 = R.ot2 != null ? R.ot2 : R.norm, rWknd = R.weekend != null ? R.weekend : R.norm;
+    const rNorm = R.norm;
+    const rOt1 = R.ot1 != null ? R.ot1 : R.norm;
+    const rOt2 = R.ot2 != null ? R.ot2 : R.norm;
+    const rWknd = R.weekend != null ? R.weekend : R.norm;
     const out = [];
+
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month, d);
       const dow = dateObj.getDay();
       const info = data.days[d] || {};
       const type = info.type || '';
       const isSchedRest = isScheduleRestDay(cal, dateObj);
+
       let isHoliday = false, isDayOff = false, isWork = false;
       if (type === 'holiday') isHoliday = true;
       else if (type === 'dayoff') isDayOff = true;
       else if (type === 'work') isWork = true;
       else isWork = !isSchedRest;
+
       const nextDayData = (d < daysInMonth) ? (data.days[d+1]) : null;
       const shortened = isWork && nextDayData && nextDayData.shortened === true;
+
       const norm = isWork ? Math.max(0, npd - (shortened ? 1 : 0)) : 0;
       const hours = Number(data.hours[d]) || 0;
       const extra = Number(info.extraIncome) || 0;
+
       let ot = 0, wkndHours = 0, pay = 0;
       if (isWork) {
         pay += Math.min(hours, norm) * rNorm * bonus;
         ot = Math.max(0, hours - norm);
         pay += Math.min(ot, 2) * rOt1 * bonus;
         pay += Math.max(0, ot - 2) * rOt2 * bonus;
-      } else { wkndHours = hours; pay = hours * rWknd * bonus; }
+      } else {
+        wkndHours = hours;
+        pay = hours * rWknd * bonus;
+      }
       pay += extra;
+
       out.push({ d, dow, isWork, isHoliday, isDayOff, isSchedRest, type,
         shortened, norm, hours, ot, weekendHours: wkndHours, pay, extraIncome: extra,
         comment: info.comment || '' });
@@ -1339,6 +1371,7 @@
     const [y, m] = bucket.split('-').map(Number);
     return { year: y, month0: m - 1 };
   }
+
   function getPaidOnIndex(year, month0) {
     const result = {};
     for (const monthKey in currentCal.months) {
@@ -1346,25 +1379,33 @@
       if (!m.payments) continue;
       for (const id in m.payments) {
         const p = m.payments[id];
-        if (!p || !p.paidOn) continue;                    // ← проверка null
+        if (!p.paidOn) continue;
         const parsed = parseDateKey(p.paidOn);
         if (!parsed || parsed.year !== year || parsed.month0 !== month0) continue;
         if (!result[p.paidOn]) result[p.paidOn] = [];
-        result[p.paidOn].push({ id, bucket: monthKey, amount: Number(p.amount) || 0, note: p.note || '', paidOn: p.paidOn });
+        result[p.paidOn].push({
+          id, bucket: monthKey,
+          amount: Number(p.amount) || 0,
+          note: p.note || '',
+          paidOn: p.paidOn
+        });
       }
     }
     return result;
   }
+
   function getPaymentInfo() {
     const salary = currentDays.reduce((s, d) => s + d.pay, 0);
     const bucket = bucketKey(view.year, view.month);
-    const entries = Object.keys(currentMonth.payments)
-      .filter(id => currentMonth.payments[id])            // ← фильтр null
-      .map(id => {
-        const p = currentMonth.payments[id];
-        return { id, bucket, paidOn: p.paidOn || '', amount: Number(p.amount) || 0, note: p.note || '' };
-      })
-      .sort((a, b) => (a.paidOn || '').localeCompare(b.paidOn || ''));
+    const entries = Object.keys(currentMonth.payments).map(id => {
+      const p = currentMonth.payments[id];
+      return {
+        id, bucket,
+        paidOn: p.paidOn || '',
+        amount: Number(p.amount) || 0,
+        note: p.note || ''
+      };
+    }).sort((a, b) => (a.paidOn || '').localeCompare(b.paidOn || ''));
     const totalPaid = entries.reduce((s, e) => s + e.amount, 0);
     const remaining = Math.max(0, salary - totalPaid);
     const overpaid = Math.max(0, totalPaid - salary);
@@ -1372,6 +1413,7 @@
     const pct = salary > 0 ? Math.min(100, (totalPaid / salary) * 100) : (totalPaid > 0 ? 100 : 0);
     return { salary, totalPaid, remaining, overpaid, isFullyPaid, entries, pct };
   }
+
   function entryLabel(entry) {
     const p = parseDateKey(entry.paidOn);
     if (!p) return entry.paidOn || '—';
@@ -1380,9 +1422,11 @@
 
   function currentTheme() { return state.theme || 'light'; }
   function currentOrientation() { return state.orientation || 'portrait'; }
+
   function applyTheme() {
-    document.documentElement.setAttribute('data-theme', currentTheme());
-    setColors(currentTheme(), currentCal ? currentCal.colors : { weekend: null, holiday: null });
+    const theme = currentTheme();
+    document.documentElement.setAttribute('data-theme', theme);
+    setColors(theme, currentCal ? currentCal.colors : { weekend: null, holiday: null });
   }
   function applyOrientation() {
     const o = currentOrientation();
@@ -1444,6 +1488,7 @@
     $('calendarScreen').style.display = '';
     renderCalendar();
   }
+
   function renderList() {
     const el = $('calendarList');
     const ids = Object.keys(state.calendars);
@@ -1461,6 +1506,7 @@
         '<button class="cal-delete" data-del="' + id + '" title="Удалить">✕</button></div>';
     }).join('');
   }
+
   function renderCalendar() {
     if (!currentCal) return;
     currentMonth = getMonthData(currentCal, view.year, view.month);
@@ -1475,15 +1521,18 @@
     updateSummary();
     renderPayments();
   }
+
   function dayHTML(d) {
     const cls = ['day'];
     let badges = '', dayFg = '';
     const def = THEME_DEFAULTS[currentTheme()];
     if (d.isHoliday) {
-      cls.push('holiday'); badges += '<span class="badge red">праздник</span>';
+      cls.push('holiday');
+      badges += '<span class="badge red">праздник</span>';
       dayFg = contrastText(currentCal.colors.holiday || def.holiday);
     } else if (d.type === 'dayoff') {
-      cls.push('off'); badges += '<span class="badge gray">вых</span>';
+      cls.push('off');
+      badges += '<span class="badge gray">вых</span>';
       dayFg = contrastText(currentCal.colors.weekend || def.weekend);
     } else if (d.type === '' && d.isSchedRest) {
       cls.push('off');
@@ -1493,16 +1542,24 @@
     }
     if (d.shortened) badges += '<span class="badge blue">−1ч</span>';
     if (now.getFullYear() === view.year && now.getMonth() === view.month && now.getDate() === d.d) cls.push('today');
+
     const styleAttr = dayFg ? ' style="--day-fg:' + dayFg + '"' : '';
-    const commentBtn = d.comment ? '<button class="tool-btn comment" data-action="comment" data-d="' + d.d + '" title="Комментарий">💬</button>' : '';
+    const commentBtn = d.comment
+      ? '<button class="tool-btn comment" data-action="comment" data-d="' + d.d + '" title="Комментарий">💬</button>'
+      : '';
     const extraPlus = d.extraIncome ? '<span class="pay-plus" title="Есть доп. доход">+</span>' : '';
+
     const dateKey = dateKeyFrom(view.year, view.month, d.d);
     const dayPayments = paidOnIndex[dateKey] || [];
     const pills = dayPayments.length
       ? '<div class="payment-pills">' + dayPayments.map(p =>
           '<button class="payment-pill" data-action="edit-payment" data-bucket="' + p.bucket + '" data-id="' + p.id + '" title="Выплата: ' + money(p.amount) + (p.note ? ' — ' + escapeHtml(p.note) : '') + '">' +
-            '<span class="payment-icon">💵</span><span class="payment-amount">' + money(p.amount) + '</span></button>'
-        ).join('') + '</div>' : '';
+            '<span class="payment-icon">💵</span>' +
+            '<span class="payment-amount">' + money(p.amount) + '</span>' +
+          '</button>'
+        ).join('') + '</div>'
+      : '';
+
     return '<div class="' + cls.join(' ') + '" data-d="' + d.d + '"' + styleAttr + '>' +
       '<div class="cell-top">' +
         '<button class="num" data-action="day-settings" data-d="' + d.d + '">' + d.d + '</button>' +
@@ -1515,6 +1572,7 @@
         '<span class="pay">' + (d.pay ? money(d.pay) : '') + extraPlus + '</span>' +
       '</div>' + pills + '</div>';
   }
+
   function updateSummary() {
     let norm = 0, worked = 0, ot = 0, wknd = 0, pay = 0;
     for (const d of currentDays) { norm += d.norm; worked += d.hours; ot += d.ot; wknd += d.weekendHours; pay += d.pay; }
@@ -1523,6 +1581,7 @@
     $('sOt').innerHTML = fmtH(ot) + ' <small>ч</small>';
     $('sWeekend').innerHTML = fmtH(wknd) + ' <small>ч</small>';
     $('sPay').textContent = money(pay);
+
     const pi = getPaymentInfo();
     $('sPaid').textContent = money(pi.totalPaid);
     const pct = Math.max(0, Math.min(100, pi.pct));
@@ -1537,11 +1596,15 @@
       sub.textContent = '—';
     }
   }
+
   function renderPayments() {
     const pi = getPaymentInfo();
     $('fullyPaidChk').checked = !!currentMonth.fullyPaidOverride;
     const list = $('paymentsList');
-    if (!pi.entries.length) { list.innerHTML = '<div class="payment-empty">Пока нет выплат</div>'; return; }
+    if (!pi.entries.length) {
+      list.innerHTML = '<div class="payment-empty">Пока нет выплат</div>';
+      return;
+    }
     list.innerHTML = pi.entries.map(e =>
       '<div class="payment-item" data-bucket="' + e.bucket + '" data-id="' + e.id + '">' +
         '<div class="pay-date">' + entryLabel(e) + '</div>' +
@@ -1553,6 +1616,7 @@
         '</div></div>'
     ).join('');
   }
+
   function onHoursInput(inp) {
     let raw = inp.value.replace(/,/g, '.').replace(/[^\d.]/g, '');
     const parts = raw.split('.');
@@ -1560,11 +1624,11 @@
     if (raw !== inp.value) inp.value = raw;
     const d = Number(inp.dataset.d);
     const v = (raw === '' || raw === '.') ? 0 : parseFloat(raw);
-    if (!v || isNaN(v)) currentMonth.hours[d] = null;   // ← было delete
-    else currentMonth.hours[d] = v;
+    if (!v || isNaN(v)) delete currentMonth.hours[d]; else currentMonth.hours[d] = v;
     saveState();
     recalcFast();
   }
+
   function recalcFast() {
     currentDays = computeMonth(currentCal, view.year, view.month);
     updateSummary();
@@ -1585,12 +1649,6 @@
     if (!inp.classList || !inp.classList.contains('hours')) return;
     const v = Number(currentMonth.hours[inp.dataset.d]) || 0;
     inp.value = v ? String(v) : '';
-    if (pendingRender) {
-      pendingRender = false;
-      setTimeout(() => {
-        if (!document.activeElement || document.activeElement.tagName !== 'INPUT') renderCurrentScreen();
-      }, 50);
-    }
   }, true);
   $('grid').addEventListener('keydown', e => {
     if (e.key !== 'Enter' || !e.target.classList.contains('hours')) return;
@@ -1625,8 +1683,11 @@
     state.calendars[id] = {
       name,
       rates: { norm: 100, ot1: null, ot2: null, weekend: null, gross: false, history: [] },
-      schedule: { mode: 'weekdays', workdays: [1,2,3,4,5], normPerDay: 8, shift: { pattern: [2, 2], startDate: formatDateInput(new Date()) } },
-      colors: { weekend: null, holiday: null }, premiums: [], months: {}
+      schedule: { mode: 'weekdays', workdays: [1,2,3,4,5], normPerDay: 8,
+        shift: { pattern: [2, 2], startDate: formatDateInput(new Date()) } },
+      colors: { weekend: null, holiday: null },
+      premiums: [],
+      months: {}
     };
     saveState();
     $('addCalOverlay').classList.remove('show');
@@ -1656,7 +1717,11 @@
   function openSalarySettings() {
     $('salarySettingsTitle').textContent = currentCal.name;
     $('applyAllChk').checked = false;
-    renderRatesSection(); renderPremiums(); renderWorkdays(); renderScheduleMode(); renderShiftFields();
+    renderRatesSection();
+    renderPremiums();
+    renderWorkdays();
+    renderScheduleMode();
+    renderShiftFields();
     $('salarySettingsOverlay').classList.add('show');
     openModals.add('salarySettingsOverlay');
   }
@@ -1669,105 +1734,205 @@
     $('cloudBinId').value = state.cloud.binId || '';
     $('cloudMasterKey').value = state.cloud.masterKey || '';
     $('cloudPassphrase').value = state.cloud.passphrase || '';
-    updateCloudUI();
+    updateCloudSetupUI();
     $('settingsOverlay').classList.add('show');
     openModals.add('settingsOverlay');
   }
 
-  function updateCloudUI() {
-    const connected = cloudConfigured();
-    $('cloudConnectBtn').style.display = connected ? 'none' : '';
-    $('cloudSyncBtn').style.display = connected ? '' : 'none';
-    $('cloudLoadBtn').style.display = connected ? '' : 'none';
-    $('cloudDisconnectBtn').style.display = connected ? '' : 'none';
+  // ─── Cloud setup UI ────────────────────────────────────────
+  function updateCloudSetupUI() {
+    const binId = ($('cloudBinId').value || '').trim();
+    const masterKey = ($('cloudMasterKey').value || '').trim();
+    const passphrase = $('cloudPassphrase').value || '';
+    const fieldsValid = !!(binId && masterKey && passphrase.length >= 6);
+
+    $('cloudLoadBtn').style.display = fieldsValid ? '' : 'none';
+    $('cloudSaveBtn').style.display = fieldsValid ? '' : 'none';
+    $('cloudDisconnectBtn').style.display = state.cloud.enabled ? '' : 'none';
 
     const el = $('cloudSetupStatus');
-    if (connected && state.cloud.authError) {
+    if (state.cloud.enabled && state.cloud.authError) {
       el.className = 'cloud-setup-status error';
-      el.textContent = '⚠ Неверный пароль шифрования. Отключите облако и подключитесь заново.';
-    } else if (connected) {
+      el.innerHTML = '⚠ Пароль шифрования не совпадает с облаком.<br>Введите актуальный пароль и нажмите «Загрузить».';
+    } else if (state.cloud.enabled) {
       el.className = 'cloud-setup-status ok';
-      el.textContent = '🔒 Подключено. Автосинхронизация при изменениях.' +
-        (state.cloud.lastSync ? ' Последняя: ' + new Date(state.cloud.lastSync).toLocaleString() : '');
+      el.innerHTML = '🔒 Облако активно. Автосинхронизация при работе с календарём.<br>Последняя синхронизация: ' +
+        (state.cloud.lastSync ? new Date(state.cloud.lastSync).toLocaleString() : '—');
     } else {
       el.className = 'cloud-setup-status';
       el.textContent = 'Облако не подключено. Данные хранятся только на этом устройстве.';
     }
   }
 
-  $('cloudConnectBtn').onclick = async () => {
+  ['cloudBinId', 'cloudMasterKey', 'cloudPassphrase'].forEach(id => {
+    $(id).addEventListener('input', updateCloudSetupUI);
+  });
+
+  $('cloudLoadBtn').onclick = async () => {
     const binId = ($('cloudBinId').value || '').trim();
     const masterKey = ($('cloudMasterKey').value || '').trim();
     const passphrase = $('cloudPassphrase').value || '';
 
-    if (!binId || !masterKey) { alert('Заполните Bin ID и Master Key.'); return; }
-    if (passphrase.length < 6) { alert('Пароль должен быть не короче 6 символов.'); return; }
-    if (!cryptoAvailable()) { alert('Шифрование недоступно. Используйте HTTPS или localhost.'); return; }
+    if (!binId || !masterKey || passphrase.length < 6) {
+      alert('Заполните все поля (пароль ≥6 символов).');
+      return;
+    }
+    if (!cryptoAvailable()) {
+      alert('Шифрование недоступно в этом браузере. Используйте HTTPS или localhost.');
+      return;
+    }
 
-    state.cloud = { enabled: true, binId, masterKey, passphrase, lastSync: null, authError: false };
-    saveLocal();
-    updateCloudUI();
-    setCloudIndicator();
-    await performSync();
-    updateCloudUI();
-    startPolling();
+    const btn = $('cloudLoadBtn');
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Загружаем…';
+
+    try {
+      const result = await fetchRemoteData(binId, masterKey, passphrase);
+
+      if (result.status === 'decrypt_failed') {
+        alert('Неверный пароль. Данные в облаке не расшифрованы.\n\nПроверьте пароль и попробуйте снова.');
+        return;
+      }
+      if (result.status === 'error') {
+        alert('Ошибка загрузки: ' + result.error);
+        return;
+      }
+      if (result.status === 'empty') {
+        state.cloud.binId = binId;
+        state.cloud.masterKey = masterKey;
+        state.cloud.passphrase = passphrase;
+        state.cloud.enabled = true;
+        state.cloud.authError = false;
+        saveLocalOnly();
+        await cloudSaveToRemote();
+        updateCloudSetupUI();
+        updateCloudIndicators();
+        alert('Облако было пустым. Локальные данные загружены в него. Облако активировано.');
+        return;
+      }
+
+      state.cloud.binId = binId;
+      state.cloud.masterKey = masterKey;
+      state.cloud.passphrase = passphrase;
+      state.cloud.enabled = true;
+      state.cloud.authError = false;
+      applyRemoteToLocal(result.data);
+      authErrorNotified = false;
+      renderCurrentScreen();
+      updateCloudSetupUI();
+      updateCloudIndicators('ok');
+      alert('Данные загружены из облака. Облако активировано.');
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
   };
 
-  $('cloudSyncBtn').onclick = () => performSync();
+  $('cloudSaveBtn').onclick = async () => {
+    const binId = ($('cloudBinId').value || '').trim();
+    const masterKey = ($('cloudMasterKey').value || '').trim();
+    const passphrase = $('cloudPassphrase').value || '';
 
-  $('cloudLoadBtn').onclick = async () => {
-    if (!cloudConfigured()) return;
-    if (!confirm('Заменить локальные данные облачными?\n\nВсе несохранённые локальные правки будут потеряны.')) return;
-    if (!cryptoAvailable()) return;
+    if (!binId || !masterKey || passphrase.length < 6) {
+      alert('Заполните все поля (пароль ≥6 символов).');
+      return;
+    }
+    if (!cryptoAvailable()) {
+      alert('Шифрование недоступно в этом браузере. Используйте HTTPS или localhost.');
+      return;
+    }
+
+    const btn = $('cloudSaveBtn');
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Сохраняем…';
+
     try {
-      const remoteRaw = await fetchRemoteRaw();
-      if (!remoteRaw || typeof remoteRaw !== 'object') throw new Error('Облако пустое');
-      const remoteData = remoteRaw.__encrypted
-        ? await decryptJson(remoteRaw, state.cloud.passphrase)
-        : remoteRaw;
-      if (!remoteData || !remoteData.calendars) throw new Error('Некорректные данные');
-      state.calendars = remoteData.calendars;
-      state.lastModified = remoteData.lastModified || Date.now();
-      state.cloud.lastSync = Date.now();
+      let remote = null;
+      try {
+        const res = await fetch('https://api.jsonbin.io/v3/b/' + binId + '/latest', {
+          headers: { 'X-Master-Key': masterKey }
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        remote = json.record || json;
+      } catch (e) {
+        alert('Не удалось прочитать облако: ' + e.message);
+        return;
+      }
+
+      const isEmpty = !remote || typeof remote !== 'object' || (!remote.__encrypted && !remote.calendars);
+      if (!isEmpty && remote.__encrypted) {
+        let passwordOk = false;
+        try {
+          await decryptJson(remote, passphrase);
+          passwordOk = true;
+        } catch (e) {
+          passwordOk = false;
+        }
+        if (!passwordOk) {
+          const confirmOverwrite = confirm(
+            'Пароль в облаке не совпадает с введённым.\n\n' +
+            'Перезаписать облако новыми данными с новым паролем?\n\n' +
+            '⚠ Данные в облаке, зашифрованные старым паролем, будут потеряны.'
+          );
+          if (!confirmOverwrite) {
+            return;
+          }
+          const confirmPass = prompt('Введите новый пароль ещё раз для подтверждения:');
+          if (confirmPass !== passphrase) {
+            alert('Пароли не совпадают. Отмена.');
+            return;
+          }
+        }
+      }
+
+      state.cloud.binId = binId;
+      state.cloud.masterKey = masterKey;
+      state.cloud.passphrase = passphrase;
+      state.cloud.enabled = true;
       state.cloud.authError = false;
-      saveLocal();
-      applyTheme();
-      if (currentCalId && state.calendars[currentCalId]) currentCal = state.calendars[currentCalId];
-      else currentCal = null;
-      renderCurrentScreen();
-      updateCloudUI();
-      setCloudIndicator('ok');
-      alert('Данные заменены данными из облака.');
+      state.lastModified = Date.now();
+      saveLocalOnly();
+
+      const payload = {
+        calendars: state.calendars,
+        theme: state.theme,
+        orientation: state.orientation,
+        lastModified: state.lastModified
+      };
+      const encrypted = await encryptJson(payload, passphrase);
+      const saveRes = await fetch('https://api.jsonbin.io/v3/b/' + binId, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': masterKey
+        },
+        body: JSON.stringify(encrypted)
+      });
+      if (!saveRes.ok) throw new Error('HTTP ' + saveRes.status);
+
+      state.cloud.lastSync = Date.now();
+      saveLocalOnly();
+      authErrorNotified = false;
+      updateCloudSetupUI();
+      updateCloudIndicators('ok');
+      alert('Данные сохранены в облако. Облако активировано.');
     } catch (e) {
-      alert('Ошибка загрузки: ' + (e.message || e));
+      alert('Ошибка сохранения: ' + (e.message || e));
+    } finally {
+      btn.disabled = false; btn.textContent = old;
     }
   };
 
   $('cloudDisconnectBtn').onclick = () => {
-    if (!confirm('Отключить синхронизацию?\n\nДанные останутся на устройстве. В облаке данные сохранятся, но перестанут обновляться.')) return;
+    if (!confirm('Отключить облачную синхронизацию?\n\nДанные останутся на устройстве. В облаке данные сохранятся, но перестанут обновляться.')) return;
     state.cloud.enabled = false;
-    state.cloud.lastSync = null;
     state.cloud.authError = false;
-    saveLocal();
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    updateCloudUI();
-    setCloudIndicator();
+    state.cloud.lastSync = null;
+    saveLocalOnly();
+    updateCloudSetupUI();
+    updateCloudIndicators();
   };
-
-  $('hardResetBtn').onclick = async () => {
-    if (!confirm('Сбросить кэш и перезагрузить страницу?\n\nЭто снимает Service Worker и принудительно загружает свежую версию кода.')) return;
-    try {
-      if ('serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        for (const r of regs) await r.unregister();
-      }
-      if ('caches' in window) {
-        const keys = await caches.keys();
-        for (const k of keys) await caches.delete(k);
-      }
-    } catch (e) {}
-    location.href = location.pathname + '?v=' + Date.now() + location.hash;
-  };
+  // ───────────────────────────────────────────────────────────
 
   function renderRatesSection() {
     const R = getEffectiveRates(currentCal, view.year, view.month);
@@ -1775,6 +1940,7 @@
     $('grossChk').checked = !!currentCal.rates.gross;
     $('rateNorm').value = R.rawNorm;
     updateGrossHint();
+
     let html = '';
     for (const k of ['ot1','ot2','weekend']) {
       if (raw[k] != null) {
@@ -1785,12 +1951,14 @@
       }
     }
     $('extraRatesContainer').innerHTML = html;
+
     let add = '';
     for (const k of ['ot1','ot2','weekend']) {
       if (raw[k] == null) add += '<button class="btn" data-add-rate="' + k + '">+ ' + RATE_LABELS[k] + '</button>';
     }
     $('addRateRow').innerHTML = add;
   }
+
   function updateGrossHint() {
     const hint = $('grossHint');
     const gross = $('grossChk').checked;
@@ -1800,6 +1968,7 @@
     hint.style.display = '';
     hint.textContent = 'Из ' + money(raw) + ' будет удержано ' + money(raw - net) + ' · на руки ' + money(net) + '/ч';
   }
+
   function applyRateChange(field, value, needsRerender) {
     const applyAll = $('applyAllChk').checked;
     const R = currentCal.rates;
@@ -1823,6 +1992,7 @@
     renderList();
     updatePremiumSummary();
   }
+
   $('grossChk').addEventListener('change', function () {
     currentCal.rates.gross = this.checked;
     saveState(); updateGrossHint(); renderCalendar(); renderList(); updatePremiumSummary();
@@ -1865,6 +2035,7 @@
     currentCal.schedule.mode = mode;
     saveState(); renderScheduleMode(); renderCalendar();
   });
+
   function renderShiftFields() {
     const s = currentCal.schedule.shift;
     $('shiftPattern').value = s.pattern[0] + '/' + s.pattern[1];
@@ -1875,11 +2046,17 @@
     const el = $('shiftPreview');
     const s = currentCal.schedule.shift;
     const w = Number(s.pattern[0]) || 0, r = Number(s.pattern[1]) || 0;
-    if (w + r === 0) { el.textContent = 'Укажите цикл, например 2/2'; el.classList.add('error'); return; }
+    if (w + r === 0) {
+      el.textContent = 'Укажите цикл, например 2/2';
+      el.classList.add('error');
+      return;
+    }
     el.classList.remove('error');
     let wc = 0, rc = 0;
     const dim = new Date(view.year, view.month + 1, 0).getDate();
-    for (let d = 1; d <= dim; d++) { if (isShiftWorkDate(new Date(view.year, view.month, d), s)) wc++; else rc++; }
+    for (let d = 1; d <= dim; d++) {
+      if (isShiftWorkDate(new Date(view.year, view.month, d), s)) wc++; else rc++;
+    }
     el.textContent = 'Цикл ' + (w + r) + ' дн.: ' + w + ' раб / ' + r + ' вых. В этом месяце по графику: ' + wc + ' раб, ' + rc + ' вых.';
   }
   $('shiftPattern').addEventListener('input', function () {
@@ -1897,14 +2074,17 @@
   function renderPremiums() {
     const list = $('premiumsList');
     const ps = currentCal.premiums;
-    if (!ps.length) list.innerHTML = '<div class="premium-empty">Надбавок нет — ставка без изменений</div>';
-    else list.innerHTML = ps.map(p =>
-      '<div class="premium-item" data-id="' + p.id + '">' +
-        '<input type="text" class="premium-name" data-id="' + p.id + '" value="' + escapeHtml(p.name || '') + '" placeholder="Название">' +
-        '<input type="number" class="premium-percent" data-id="' + p.id + '" value="' + (Number(p.percent) || 0) + '" min="0" step="0.1">' +
-        '<span class="premium-pct">%</span>' +
-        '<button class="premium-del" data-id="' + p.id + '" title="Удалить">✕</button></div>'
-    ).join('');
+    if (!ps.length) {
+      list.innerHTML = '<div class="premium-empty">Надбавок нет — ставка без изменений</div>';
+    } else {
+      list.innerHTML = ps.map(p =>
+        '<div class="premium-item" data-id="' + p.id + '">' +
+          '<input type="text" class="premium-name" data-id="' + p.id + '" value="' + escapeHtml(p.name || '') + '" placeholder="Название">' +
+          '<input type="number" class="premium-percent" data-id="' + p.id + '" value="' + (Number(p.percent) || 0) + '" min="0" step="0.1">' +
+          '<span class="premium-pct">%</span>' +
+          '<button class="premium-del" data-id="' + p.id + '" title="Удалить">✕</button></div>'
+      ).join('');
+    }
     updatePremiumSummary();
   }
   function updatePremiumSummary() {
@@ -2000,7 +2180,9 @@
     const o = btn.dataset.orientation;
     if (currentOrientation() === o) return;
     state.orientation = o;
-    saveState(); applyOrientation(); updateOrientationChips();
+    saveState();
+    applyOrientation();
+    updateOrientationChips();
   });
   function updateOrientationChips() {
     const o = currentOrientation();
@@ -2026,6 +2208,7 @@
   };
 
   function getAutoType(d) { return isScheduleRestDay(currentCal, d) ? 'dayoff' : 'work'; }
+
   function updateShortenNote(dayNum) {
     const note = $('shortenNote');
     if (!dayNum) { note.style.display = 'none'; return; }
@@ -2059,6 +2242,7 @@
     const dInfo = currentDays.find(x => x.d === dayNum);
     const autoType = getAutoType(new Date(view.year, view.month, dayNum));
     $('dayModalTitle').textContent = dayNum + ' ' + MONTHS_GEN[view.month] + ' ' + view.year;
+
     let hint = '';
     if (dInfo) {
       let label = dInfo.isHoliday ? 'Праздник' : dInfo.isWork ? 'Рабочий' : 'Выходной';
@@ -2069,6 +2253,7 @@
       if (dInfo.extraIncome) hint += ' · +' + money(dInfo.extraIncome);
     }
     $('dayModalHint').textContent = hint;
+
     const eff = info.type || autoType;
     document.querySelectorAll('#dayTypeChips .chip').forEach(c => c.classList.toggle('active', c.dataset.type === eff));
     $('dayShortened').checked = info.shortened === true;
@@ -2098,7 +2283,8 @@
     if (extra > 0) updated.extraIncome = extra;
     if (comment) updated.comment = comment;
 
-    currentMonth.days[editingDay] = Object.keys(updated).length ? updated : null;  // ← было delete
+    if (!Object.keys(updated).length) delete currentMonth.days[editingDay];
+    else currentMonth.days[editingDay] = updated;
 
     saveState();
     $('dayOverlay').classList.remove('show');
@@ -2109,7 +2295,9 @@
 
   function maxDayFor(year, month0) {
     const today = new Date();
-    if (year === today.getFullYear() && month0 === today.getMonth()) return today.getDate();
+    if (year === today.getFullYear() && month0 === today.getMonth()) {
+      return today.getDate();
+    }
     return daysInMonth(year, month0);
   }
   function buildYearOptions(selectedYear) {
@@ -2117,7 +2305,9 @@
     const currentYear = today.getFullYear();
     if (selectedYear > currentYear) selectedYear = currentYear;
     let html = '';
-    for (let y = 2000; y <= currentYear; y++) html += '<option value="' + y + '"' + (y === selectedYear ? ' selected' : '') + '>' + y + '</option>';
+    for (let y = 2000; y <= currentYear; y++) {
+      html += '<option value="' + y + '"' + (y === selectedYear ? ' selected' : '') + '>' + y + '</option>';
+    }
     return html;
   }
   function buildMonthOptions(selectedMonth, selectedYear) {
@@ -2125,14 +2315,18 @@
     const maxMonth = selectedYear === today.getFullYear() ? today.getMonth() : 11;
     const eff = Math.min(selectedMonth, maxMonth);
     let html = '';
-    for (let m = 0; m <= maxMonth; m++) html += '<option value="' + m + '"' + (m === eff ? ' selected' : '') + '>' + MONTHS[m] + '</option>';
+    for (let m = 0; m <= maxMonth; m++) {
+      html += '<option value="' + m + '"' + (m === eff ? ' selected' : '') + '>' + MONTHS[m] + '</option>';
+    }
     return html;
   }
   function buildDayOptions(selectedDay, selectedYear, selectedMonth) {
     const max = maxDayFor(selectedYear, selectedMonth);
     const eff = Math.min(Math.max(1, selectedDay || 1), max);
     let html = '';
-    for (let d = 1; d <= max; d++) html += '<option value="' + d + '"' + (d === eff ? ' selected' : '') + '>' + d + '</option>';
+    for (let d = 1; d <= max; d++) {
+      html += '<option value="' + d + '"' + (d === eff ? ' selected' : '') + '>' + d + '</option>';
+    }
     return html;
   }
   function setPaymentDate(year, month0, day) {
@@ -2245,7 +2439,7 @@
     if (!confirm('Удалить эту выплату?')) return;
     const b = parseBucket(editingPayment.bucket);
     const bucketData = getMonthData(currentCal, b.year, b.month0);
-    bucketData.payments[editingPayment.id] = null;   // ← было delete
+    delete bucketData.payments[editingPayment.id];
     saveState();
     $('paymentOverlay').classList.remove('show');
     openModals.delete('paymentOverlay');
@@ -2332,21 +2526,27 @@
     a.click();
     setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1000);
   }
+
   const CDN_HTML2CANVAS = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
   function loadScript(src) {
     return new Promise((res, rej) => {
       const s = document.createElement('script');
       s.src = src; s.async = true;
       s.onload = res;
-      s.onerror = () => rej(new Error('Не удалось загрузить библиотеку.'));
+      s.onerror = () => rej(new Error('Не удалось загрузить библиотеку. Проверьте интернет.'));
       document.head.appendChild(s);
     });
   }
   let libsPromise = null;
   function ensureLibs() {
-    if (!libsPromise) libsPromise = (async () => { if (typeof html2canvas === 'undefined') await loadScript(CDN_HTML2CANVAS); })().catch(err => { libsPromise = null; throw err; });
+    if (!libsPromise) {
+      libsPromise = (async () => {
+        if (typeof html2canvas === 'undefined') await loadScript(CDN_HTML2CANVAS);
+      })().catch(err => { libsPromise = null; throw err; });
+    }
     return libsPromise;
   }
+
   function buildExportNode() {
     const app = document.querySelector('.app');
     const clone = app.cloneNode(true);
@@ -2359,11 +2559,13 @@
       nameEl.style.cssText = 'font-size:22px;font-weight:700;margin:0 0 14px;padding-top:2px;letter-spacing:-.02em;';
       calScreen.insertBefore(nameEl, calScreen.firstChild);
     }
-    ['.footnote','.back-btn','.actions','.navbtn','.day-tools','.payment-pill','.pay-actions','#addPaymentBtn','.fully-paid-check'].forEach(sel =>
+    ['.footnote','.back-btn','.actions','.navbtn','.day-tools','.payment-pill',
+     '.pay-actions','#addPaymentBtn','.fully-paid-check'].forEach(sel =>
       clone.querySelectorAll(sel).forEach(el => el.remove()));
     clone.style.paddingBottom = '24px';
     return clone;
   }
+
   async function captureApp() {
     await ensureLibs();
     const app = document.querySelector('.app');
@@ -2381,22 +2583,29 @@
     try {
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
       return await html2canvas(clone, {
-        backgroundColor: bg, scale: Math.max(2, window.devicePixelRatio || 1),
+        backgroundColor: bg,
+        scale: Math.max(2, window.devicePixelRatio || 1),
         useCORS: true, logging: false,
-        windowWidth: clone.scrollWidth, windowHeight: clone.scrollHeight
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight
       });
-    } finally { clone.remove(); }
+    } finally {
+      clone.remove();
+    }
   }
+
   function canvasToBlob(canvas, type, quality) { return new Promise(r => canvas.toBlob(r, type, quality)); }
   function exportFilename(ext) { return 'zarplata-' + view.year + '-' + pad(view.month + 1) + '.' + ext; }
+
   async function exportAs(format) {
     const btn = $('exportBtn');
     const old = btn.textContent;
     btn.disabled = true; btn.textContent = 'Готовим…';
     try {
       const canvas = await captureApp();
-      if (format === 'png') saveFile(await canvasToBlob(canvas, 'image/png'), exportFilename('png'));
-      else {
+      if (format === 'png') {
+        saveFile(await canvasToBlob(canvas, 'image/png'), exportFilename('png'));
+      } else {
         const jpg = document.createElement('canvas');
         jpg.width = canvas.width; jpg.height = canvas.height;
         const ctx = jpg.getContext('2d');
@@ -2407,8 +2616,11 @@
       }
     } catch (e) {
       alert('Экспорт не удался: ' + (e && e.message ? e.message : e));
-    } finally { btn.disabled = false; btn.textContent = old; }
+    } finally {
+      btn.disabled = false; btn.textContent = old;
+    }
   }
+
   const exportBtn = $('exportBtn'), exportMenu = $('exportMenu');
   exportBtn.onclick = e => { e.stopPropagation(); exportMenu.classList.toggle('show'); };
   document.addEventListener('click', e => { if (!e.target.closest('.export-wrap')) exportMenu.classList.remove('show'); });
@@ -2421,7 +2633,8 @@
 
   $('backupBtn').onclick = () => {
     const json = JSON.stringify(state, null, 2);
-    saveFile(new Blob([json], { type: 'application/json' }), 'salary-backup-' + new Date().toISOString().slice(0, 10) + '.json');
+    saveFile(new Blob([json], { type: 'application/json' }),
+      'salary-backup-' + new Date().toISOString().slice(0, 10) + '.json');
   };
   $('restoreBtn').onclick = () => $('restoreFile').click();
   $('restoreFile').addEventListener('change', function () {
@@ -2438,11 +2651,10 @@
         if (!state.theme) state.theme = 'light';
         if (!state.orientation) state.orientation = 'portrait';
         if (!state.lastModified) state.lastModified = Date.now();
-        saveLocal();
+        saveState();
         closeAllModals();
         applyOrientation();
         navigate('/');
-        scheduleSync();
         alert('Данные загружены: ' + Object.keys(state.calendars).length + ' календарь(ей)');
       } catch (err) { alert('Ошибка импорта: ' + err.message); }
       this.value = '';
