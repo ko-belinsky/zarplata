@@ -799,8 +799,8 @@
     dark:  { start:'#7a3018', mid:'#6a5a18', end:'#205020' }
   };
   const PBKDF2_ITERATIONS = 150000;
-  const SYNC_DEBOUNCE_MS = 700;
-  const SYNC_POLL_MS = 25000;
+  const SYNC_DEBOUNCE_MS = 400;
+  const SYNC_POLL_MS = 10000;
 
   const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const fmtH = v => nf.format(Math.round(v * 100) / 100);
@@ -999,7 +999,10 @@
 
   async function fetchRemoteRaw() {
     const res = await fetch('https://api.jsonbin.io/v3/b/' + state.cloud.binId + '/latest', {
-      headers: { 'X-Master-Key': state.cloud.masterKey },
+      headers: {
+        'X-Master-Key': state.cloud.masterKey,
+        'X-Bin-Meta': 'false'
+      },
       cache: 'no-store'
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1011,6 +1014,8 @@
     const payload = {
       __v: 4,
       calendars: state.calendars,
+      theme: state.theme,
+      orientation: state.orientation,
       lastModified: Date.now()
     };
     state.lastModified = payload.lastModified;
@@ -1033,6 +1038,13 @@
     if (!state.calendars) state.calendars = {};
 
     let changed = 0;
+
+    // Глобальные настройки
+    if (cloudWins) {
+      if (remoteData.theme && remoteData.theme !== state.theme) { state.theme = remoteData.theme; changed++; }
+      if (remoteData.orientation && remoteData.orientation !== state.orientation) { state.orientation = remoteData.orientation; changed++; }
+    }
+
     const remote = remoteData.calendars;
     const local = state.calendars;
 
@@ -1040,6 +1052,16 @@
       const rCal = remote[calId];
       if (!local[calId]) { local[calId] = rCal; changed++; continue; }
       const lCal = local[calId];
+
+      // Если облако новее — перезаписываем «глобальные» поля календаря целиком
+      if (cloudWins) {
+        if (rCal.name && lCal.name !== rCal.name) { lCal.name = rCal.name; changed++; }
+        if (rCal.colors && JSON.stringify(lCal.colors) !== JSON.stringify(rCal.colors)) { lCal.colors = rCal.colors; changed++; }
+        if (rCal.rates && JSON.stringify(lCal.rates) !== JSON.stringify(rCal.rates)) { lCal.rates = rCal.rates; changed++; }
+        if (rCal.schedule && JSON.stringify(lCal.schedule) !== JSON.stringify(rCal.schedule)) { lCal.schedule = rCal.schedule; changed++; }
+        if (rCal.premiums && JSON.stringify(lCal.premiums) !== JSON.stringify(rCal.premiums)) { lCal.premiums = rCal.premiums; changed++; }
+      }
+
       if (!rCal.months) continue;
       if (!lCal.months) lCal.months = {};
 
@@ -1112,12 +1134,10 @@
 
     let anyChange = 0;
     try {
-      // ─── Фаза 1: PULL ───
       const remoteRaw = await fetchRemoteRaw();
 
-      // Облако пустое → сразу push
       if (!remoteRaw || typeof remoteRaw !== 'object' || (!remoteRaw.__encrypted && !remoteRaw.calendars)) {
-        const ts = await pushToCloud();
+        await pushToCloud();
         state.cloud.lastSync = Date.now();
         state.cloud.authError = false;
         saveLocal();
@@ -1142,50 +1162,39 @@
 
       state.cloud.authError = false;
 
-      const remoteModified1 = remoteData.lastModified || 0;
-      const localModified1 = state.lastModified || 0;
-      const cloudWins1 = remoteModified1 > localModified1;
+      const remoteModified = remoteData.lastModified || 0;
+      const localModified = state.lastModified || 0;
+      const cloudWins = remoteModified > localModified;
 
-      // ─── Фаза 2: MERGE ───
-      const changed1 = mergeIntoLocal(remoteData, cloudWins1);
-      anyChange += changed1;
-      if (changed1) saveLocal();
+      const changed = mergeIntoLocal(remoteData, cloudWins);
+      anyChange += changed;
+      if (changed) saveLocal();
 
-      // ─── Фаза 3: PUSH (если у нас есть более новые данные) ───
-      let pushed = false;
-      if (localModified1 > remoteModified1 || changed1 > 0) {
-        // либо у нас новее, либо merge добавил — надо зафиксировать в облаке
-        const newTs = await pushToCloud();
-        pushed = true;
+      if (localModified > remoteModified || changed > 0) {
+        await pushToCloud();
       } else {
-        state.lastModified = remoteModified1;
-      }
-
-      // ─── Фаза 4: Верификация — ещё один PULL на случай race ───
-      if (pushed) {
-        try {
-          const verifyRaw = await fetchRemoteRaw();
-          if (verifyRaw && verifyRaw.__encrypted) {
-            const verifyData = await decryptJson(verifyRaw, state.cloud.passphrase);
-            const verifyTs = verifyData.lastModified || 0;
-            if (verifyTs > (state.lastModified || 0)) {
-              // Кто-то успел запушить между нашими pull и push — снова merge
-              const changed2 = mergeIntoLocal(verifyData, false);
-              anyChange += changed2;
-              if (changed2) saveLocal();
-              // Не пушим снова — следующая итерация по таймеру/событию подхватит
-            }
-          }
-        } catch (e) {
-          // verify — необязательный шаг, игнорируем ошибки
-        }
+        state.lastModified = remoteModified;
       }
 
       state.cloud.lastSync = Date.now();
       saveLocal();
       setCloudIndicator('ok');
 
-      maybeRenderAfterSync(anyChange);
+      // Если изменились глобальные настройки — применить их в UI
+      if (anyChange) {
+        applyTheme();
+        applyOrientation();
+      }
+
+      if (anyChange) {
+        const active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+          pendingRender = true;
+        } else {
+          renderCurrentScreen();
+          pendingRender = false;
+        }
+      }
     } catch (e) {
       console.warn('Sync error:', e);
       setCloudIndicator('error');
@@ -1194,7 +1203,7 @@
         syncRetryTimer = setTimeout(() => {
           syncRetryTimer = null;
           if (cloudConfigured() && !syncInProgress) performSync();
-        }, 8000);
+        }, 5000);
       }
     } finally {
       syncInProgress = false;
