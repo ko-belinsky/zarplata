@@ -1014,8 +1014,8 @@
     const payload = {
       __v: 4,
       calendars: state.calendars,
-      theme: state.theme,
-      orientation: state.orientation,
+      theme: state.theme,           // ← добавить
+      orientation: state.orientation, // ← добавить
       lastModified: Date.now()
     };
     state.lastModified = payload.lastModified;
@@ -1039,7 +1039,6 @@
 
     let changed = 0;
 
-    // Глобальные настройки
     if (cloudWins) {
       if (remoteData.theme && remoteData.theme !== state.theme) { state.theme = remoteData.theme; changed++; }
       if (remoteData.orientation && remoteData.orientation !== state.orientation) { state.orientation = remoteData.orientation; changed++; }
@@ -1053,7 +1052,6 @@
       if (!local[calId]) { local[calId] = rCal; changed++; continue; }
       const lCal = local[calId];
 
-      // Если облако новее — перезаписываем «глобальные» поля календаря целиком
       if (cloudWins) {
         if (rCal.name && lCal.name !== rCal.name) { lCal.name = rCal.name; changed++; }
         if (rCal.colors && JSON.stringify(lCal.colors) !== JSON.stringify(rCal.colors)) { lCal.colors = rCal.colors; changed++; }
@@ -1074,21 +1072,30 @@
           if (!lM.hours) lM.hours = {};
           for (const d in rM.hours) {
             if (!(d in lM.hours)) { lM.hours[d] = rM.hours[d]; changed++; }
-            else if (cloudWins && lM.hours[d] !== rM.hours[d]) { lM.hours[d] = rM.hours[d]; changed++; }
+            else if (lM.hours[d] !== rM.hours[d]) {
+              if (lM.hours[d] === null) continue;    // локально удалено — не восстанавливаем
+              if (cloudWins) { lM.hours[d] = rM.hours[d]; changed++; }
+            }
           }
         }
         if (rM.days) {
           if (!lM.days) lM.days = {};
           for (const d in rM.days) {
             if (!(d in lM.days)) { lM.days[d] = rM.days[d]; changed++; }
-            else if (cloudWins && JSON.stringify(lM.days[d]) !== JSON.stringify(rM.days[d])) { lM.days[d] = rM.days[d]; changed++; }
+            else if (JSON.stringify(lM.days[d]) !== JSON.stringify(rM.days[d])) {
+              if (lM.days[d] === null) continue;
+              if (cloudWins) { lM.days[d] = rM.days[d]; changed++; }
+            }
           }
         }
         if (rM.payments) {
           if (!lM.payments) lM.payments = {};
           for (const id in rM.payments) {
             if (!(id in lM.payments)) { lM.payments[id] = rM.payments[id]; changed++; }
-            else if (cloudWins && JSON.stringify(lM.payments[id]) !== JSON.stringify(rM.payments[id])) { lM.payments[id] = rM.payments[id]; changed++; }
+            else if (JSON.stringify(lM.payments[id]) !== JSON.stringify(rM.payments[id])) {
+              if (lM.payments[id] === null) continue;
+              if (cloudWins) { lM.payments[id] = rM.payments[id]; changed++; }
+            }
           }
         }
         if (cloudWins && typeof rM.fullyPaidOverride === 'boolean' && rM.fullyPaidOverride !== lM.fullyPaidOverride) {
@@ -1339,7 +1346,7 @@
       if (!m.payments) continue;
       for (const id in m.payments) {
         const p = m.payments[id];
-        if (!p.paidOn) continue;
+        if (!p || !p.paidOn) continue;                    // ← проверка null
         const parsed = parseDateKey(p.paidOn);
         if (!parsed || parsed.year !== year || parsed.month0 !== month0) continue;
         if (!result[p.paidOn]) result[p.paidOn] = [];
@@ -1351,10 +1358,13 @@
   function getPaymentInfo() {
     const salary = currentDays.reduce((s, d) => s + d.pay, 0);
     const bucket = bucketKey(view.year, view.month);
-    const entries = Object.keys(currentMonth.payments).map(id => {
-      const p = currentMonth.payments[id];
-      return { id, bucket, paidOn: p.paidOn || '', amount: Number(p.amount) || 0, note: p.note || '' };
-    }).sort((a, b) => (a.paidOn || '').localeCompare(b.paidOn || ''));
+    const entries = Object.keys(currentMonth.payments)
+      .filter(id => currentMonth.payments[id])            // ← фильтр null
+      .map(id => {
+        const p = currentMonth.payments[id];
+        return { id, bucket, paidOn: p.paidOn || '', amount: Number(p.amount) || 0, note: p.note || '' };
+      })
+      .sort((a, b) => (a.paidOn || '').localeCompare(b.paidOn || ''));
     const totalPaid = entries.reduce((s, e) => s + e.amount, 0);
     const remaining = Math.max(0, salary - totalPaid);
     const overpaid = Math.max(0, totalPaid - salary);
@@ -1550,7 +1560,8 @@
     if (raw !== inp.value) inp.value = raw;
     const d = Number(inp.dataset.d);
     const v = (raw === '' || raw === '.') ? 0 : parseFloat(raw);
-    if (!v || isNaN(v)) delete currentMonth.hours[d]; else currentMonth.hours[d] = v;
+    if (!v || isNaN(v)) currentMonth.hours[d] = null;   // ← было delete
+    else currentMonth.hours[d] = v;
     saveState();
     recalcFast();
   }
@@ -2086,8 +2097,9 @@
     if (shortened) updated.shortened = true;
     if (extra > 0) updated.extraIncome = extra;
     if (comment) updated.comment = comment;
-    if (!Object.keys(updated).length) delete currentMonth.days[editingDay];
-    else currentMonth.days[editingDay] = updated;
+
+    currentMonth.days[editingDay] = Object.keys(updated).length ? updated : null;  // ← было delete
+
     saveState();
     $('dayOverlay').classList.remove('show');
     openModals.delete('dayOverlay');
@@ -2233,7 +2245,7 @@
     if (!confirm('Удалить эту выплату?')) return;
     const b = parseBucket(editingPayment.bucket);
     const bucketData = getMonthData(currentCal, b.year, b.month0);
-    delete bucketData.payments[editingPayment.id];
+    bucketData.payments[editingPayment.id] = null;   // ← было delete
     saveState();
     $('paymentOverlay').classList.remove('show');
     openModals.delete('paymentOverlay');
