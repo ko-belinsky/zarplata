@@ -125,6 +125,14 @@
 
   .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
     gap:10px;margin-bottom:14px}
+  /* Порядок блоков в книжной ориентации и на десктопе:
+  Норма, Отработано, Зарплата, Выплачено, Переработка, Выходные */
+  #sNorm{order:1}
+  #sWorked{order:2}
+  #sPayCard{order:3}
+  #sPaidCard{order:4}
+  #sOt{order:5}
+  #sWeekend{order:6}
   .stat{background:var(--card);border-radius:14px;padding:12px 15px;
     box-shadow:var(--shadow);transition:background .2s}
   .stat .label{font-size:10px;color:var(--muted);font-weight:600;
@@ -375,7 +383,19 @@
     [data-orientation="landscape"] .app{padding:8px 6px 24px}
     [data-orientation="landscape"] .summary{
       grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
-    [data-orientation="landscape"] .stat{padding:8px 10px;border-radius:10px}
+
+    /* Порядок в мобильном landscape:
+       Норма, Переработка, Выходные, Отработано, Зарплата, Выплачено */
+    [data-orientation="landscape"] #sNorm{order:1}
+    [data-orientation="landscape"] #sOt{order:2}
+    [data-orientation="landscape"] #sWeekend{order:3}
+    [data-orientation="landscape"] #sWorked{order:4}
+    [data-orientation="landscape"] #sPayCard{order:5}
+    [data-orientation="landscape"] #sPaidCard{order:6}
+
+    /* Все 6 блоков одинаковой высоты — компенсируем доп. строку у «Выплачено» */
+    [data-orientation="landscape"] .stat{padding:8px 10px;border-radius:10px;
+      min-height:72px;display:flex;flex-direction:column;justify-content:center}
     [data-orientation="landscape"] .stat .label{font-size:9px;margin-bottom:3px}
     [data-orientation="landscape"] .stat .value{font-size:14px}
     [data-orientation="landscape"] .stat .value small{font-size:9px}
@@ -503,9 +523,9 @@
 
     <section class="summary">
       <div class="stat"><div class="label">Норма часов</div><div class="value" id="sNorm">0</div></div>
+      <div class="stat"><div class="label">Отработано</div><div class="value" id="sWorked">0</div></div>
       <div class="stat"><div class="label">Переработка</div><div class="value" id="sOt">0</div></div>
       <div class="stat"><div class="label">Выходные / праздники</div><div class="value" id="sWeekend">0</div></div>
-      <div class="stat"><div class="label">Отработано</div><div class="value" id="sWorked">0</div></div>
       <div class="stat money clickable" id="sPayCard" title="Настройки зарплаты">
         <div class="label">Зарплата <span class="cfg-indicator">⚙</span></div>
         <div class="value" id="sPay">0 ₽</div>
