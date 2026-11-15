@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Зарплата</title>
 <meta name="theme-color" content="#3b6ef5">
 <meta name="mobile-web-app-capable" content="yes">
@@ -688,8 +691,9 @@
         <div class="quick" style="margin-top:12px">
           <button class="btn primary" id="cloudConnectBtn">Подключить</button>
           <button class="btn primary" id="cloudSyncBtn" style="display:none">🔄 Синхронизировать</button>
-          <button class="btn" id="cloudLoadBtn" style="display:none">📥 Скачать из облака</button>
+          <button class="btn" id="cloudLoadBtn" style="display:none">📥 Заменить из облака</button>
           <button class="btn danger" id="cloudDisconnectBtn" style="display:none">Отключить</button>
+          <button class="btn" id="hardResetBtn" title="Снимает service worker и перезагружает страницу">🔄 Сбросить кэш</button>
         </div>
         <div class="cloud-setup-status" id="cloudSetupStatus"></div>
       </section>
@@ -795,6 +799,8 @@
     dark:  { start:'#7a3018', mid:'#6a5a18', end:'#205020' }
   };
   const PBKDF2_ITERATIONS = 150000;
+  const SYNC_DEBOUNCE_MS = 700;
+  const SYNC_POLL_MS = 25000;
 
   const nf = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 });
   const fmtH = v => nf.format(Math.round(v * 100) / 100);
@@ -834,7 +840,6 @@
     return c <= 66 ? mixColor(p.start, p.mid, c/66) : mixColor(p.mid, p.end, (c-66)/34);
   }
 
-  // ─── Web Crypto ───────────────────────────────────────────
   function cryptoAvailable() {
     try {
       return typeof crypto !== 'undefined' && crypto.subtle &&
@@ -873,7 +878,7 @@
     const key = await deriveAesKey(passphrase, salt);
     const pt = new TextEncoder().encode(JSON.stringify(obj));
     const ctBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt);
-    return { __encrypted: true, __v: 3, salt: b64encode(salt), iv: b64encode(iv), ct: b64encode(new Uint8Array(ctBuf)) };
+    return { __encrypted: true, __v: 4, salt: b64encode(salt), iv: b64encode(iv), ct: b64encode(new Uint8Array(ctBuf)) };
   }
   async function decryptJson(payload, passphrase) {
     if (!payload || !payload.__encrypted) throw new Error('Not encrypted');
@@ -885,7 +890,6 @@
     return JSON.parse(new TextDecoder().decode(ptBuf));
   }
 
-  // ─── Rates ────────────────────────────────────────────────
   function getEffectiveRates(cal, year, month) {
     const R = cal.rates;
     const targetKey = year + '-' + pad(month+1);
@@ -935,7 +939,6 @@
     return S.mode === 'shift' ? !isShiftWorkDate(d, S.shift) : S.workdays.indexOf(d.getDay()) === -1;
   }
 
-  // ─── State ────────────────────────────────────────────────
   function loadState() {
     try {
       const s = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
@@ -966,7 +969,6 @@
   function saveLocal() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
   }
-
   function saveState() {
     state.lastModified = Date.now();
     saveLocal();
@@ -974,15 +976,12 @@
   }
 
   // ─── CLOUD SYNC ────────────────────────────────────────────
-  // Единственный принцип: pull → merge → push (если надо).
-  // - Offline: правки копятся локально, повтор при online/focus.
-  // - Конфликт: побеждает тот, у кого lastModified позже.
-  // - Пустое облако: сразу push локальных данных.
   let syncInProgress = false;
   let syncPending = false;
   let syncDebounceTimer = null;
   let syncRetryTimer = null;
   let pendingRender = false;
+  let pollTimer = null;
 
   function cloudConfigured() {
     const c = state.cloud;
@@ -995,12 +994,13 @@
     syncDebounceTimer = setTimeout(() => {
       syncDebounceTimer = null;
       performSync();
-    }, delay != null ? delay : 1500);
+    }, delay != null ? delay : SYNC_DEBOUNCE_MS);
   }
 
   async function fetchRemoteRaw() {
     const res = await fetch('https://api.jsonbin.io/v3/b/' + state.cloud.binId + '/latest', {
-      headers: { 'X-Master-Key': state.cloud.masterKey }
+      headers: { 'X-Master-Key': state.cloud.masterKey },
+      cache: 'no-store'
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
@@ -1009,7 +1009,7 @@
 
   async function pushToCloud() {
     const payload = {
-      __v: 3,
+      __v: 4,
       calendars: state.calendars,
       lastModified: Date.now()
     };
@@ -1024,11 +1024,10 @@
       body: JSON.stringify(encrypted)
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    return payload.lastModified;
   }
 
-  // Добавляет в state.calendars то, что есть в облаке, но не в локальных.
-  // При конфликте (ключ есть в обоих) — если cloudWins, берём значение из облака.
-  // Возвращает количество добавленных/изменённых ключей.
+  // Возвращает число изменённых ключей.
   function mergeIntoLocal(remoteData, cloudWins) {
     if (!remoteData || !remoteData.calendars) return 0;
     if (!state.calendars) state.calendars = {};
@@ -1079,6 +1078,28 @@
     return changed;
   }
 
+  function renderCurrentScreen() {
+    if (currentCalId && state.calendars[currentCalId]) {
+      currentCal = state.calendars[currentCalId];
+      renderCalendar();
+    } else if (currentCalId) {
+      navigate('/');
+    } else {
+      renderList();
+    }
+  }
+
+  function maybeRenderAfterSync(changed) {
+    if (!changed) return;
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+      pendingRender = true;
+    } else {
+      renderCurrentScreen();
+      pendingRender = false;
+    }
+  }
+
   async function performSync() {
     if (!cloudConfigured()) return;
     if (syncInProgress) { syncPending = true; return; }
@@ -1089,13 +1110,14 @@
     syncInProgress = true;
     setCloudIndicator('syncing');
 
+    let anyChange = 0;
     try {
-      // 1. PULL
+      // ─── Фаза 1: PULL ───
       const remoteRaw = await fetchRemoteRaw();
 
-      // Облако пустое → заливаем локальные
+      // Облако пустое → сразу push
       if (!remoteRaw || typeof remoteRaw !== 'object' || (!remoteRaw.__encrypted && !remoteRaw.calendars)) {
-        await pushToCloud();
+        const ts = await pushToCloud();
         state.cloud.lastSync = Date.now();
         state.cloud.authError = false;
         saveLocal();
@@ -1103,7 +1125,6 @@
         return;
       }
 
-      // Decrypt
       let remoteData;
       if (remoteRaw.__encrypted) {
         try {
@@ -1112,7 +1133,7 @@
           state.cloud.authError = true;
           saveLocal();
           setCloudIndicator('error');
-          return; // ретраить нет смысла
+          return;
         }
       } else {
         remoteData = remoteRaw;
@@ -1121,43 +1142,59 @@
 
       state.cloud.authError = false;
 
-      const remoteModified = remoteData.lastModified || 0;
-      const localModified = state.lastModified || 0;
-      const cloudWins = remoteModified > localModified;
+      const remoteModified1 = remoteData.lastModified || 0;
+      const localModified1 = state.lastModified || 0;
+      const cloudWins1 = remoteModified1 > localModified1;
 
-      // 2. MERGE
-      const changed = mergeIntoLocal(remoteData, cloudWins);
-      if (changed) saveLocal();
+      // ─── Фаза 2: MERGE ───
+      const changed1 = mergeIntoLocal(remoteData, cloudWins1);
+      anyChange += changed1;
+      if (changed1) saveLocal();
 
-      // 3. PUSH — если у нас есть более новые данные
-      if (localModified > remoteModified) {
-        await pushToCloud();
+      // ─── Фаза 3: PUSH (если у нас есть более новые данные) ───
+      let pushed = false;
+      if (localModified1 > remoteModified1 || changed1 > 0) {
+        // либо у нас новее, либо merge добавил — надо зафиксировать в облаке
+        const newTs = await pushToCloud();
+        pushed = true;
       } else {
-        state.lastModified = remoteModified;
+        state.lastModified = remoteModified1;
       }
+
+      // ─── Фаза 4: Верификация — ещё один PULL на случай race ───
+      if (pushed) {
+        try {
+          const verifyRaw = await fetchRemoteRaw();
+          if (verifyRaw && verifyRaw.__encrypted) {
+            const verifyData = await decryptJson(verifyRaw, state.cloud.passphrase);
+            const verifyTs = verifyData.lastModified || 0;
+            if (verifyTs > (state.lastModified || 0)) {
+              // Кто-то успел запушить между нашими pull и push — снова merge
+              const changed2 = mergeIntoLocal(verifyData, false);
+              anyChange += changed2;
+              if (changed2) saveLocal();
+              // Не пушим снова — следующая итерация по таймеру/событию подхватит
+            }
+          }
+        } catch (e) {
+          // verify — необязательный шаг, игнорируем ошибки
+        }
+      }
+
       state.cloud.lastSync = Date.now();
       saveLocal();
       setCloudIndicator('ok');
 
-      // Отрисовать объединённые данные (если пользователь не печатает)
-      if (changed) {
-        const active = document.activeElement;
-        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-          pendingRender = true;
-        } else {
-          renderCurrentScreen();
-        }
-      }
+      maybeRenderAfterSync(anyChange);
     } catch (e) {
       console.warn('Sync error:', e);
       setCloudIndicator('error');
-      // Ретрай при сетевых ошибках (не при 401/403)
       const msg = e.message || '';
       if (!/40[13]/.test(msg)) {
         syncRetryTimer = setTimeout(() => {
           syncRetryTimer = null;
           if (cloudConfigured() && !syncInProgress) performSync();
-        }, 10000);
+        }, 8000);
       }
     } finally {
       syncInProgress = false;
@@ -1202,15 +1239,24 @@
     setCloudIndicator();
     if (!cloudConfigured()) return;
     await performSync();
+    startPolling();
   }
 
-  // Автосинхронизация при возврате во вкладку и появлении сети
-  window.addEventListener('online', () => scheduleSync(200));
-  window.addEventListener('focus', () => scheduleSync(1000));
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) scheduleSync(1000);
-  });
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (!cloudConfigured()) return;
+      performSync();
+    }, SYNC_POLL_MS);
+  }
 
+  // Автосинхронизация на события
+  window.addEventListener('online', () => scheduleSync(200));
+  window.addEventListener('focus', () => scheduleSync(500));
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) scheduleSync(500);
+  });
   // ───────────────────────────────────────────────────────────
 
   function getMonthData(cal, year, month) {
@@ -1519,11 +1565,10 @@
     if (!inp.classList || !inp.classList.contains('hours')) return;
     const v = Number(currentMonth.hours[inp.dataset.d]) || 0;
     inp.value = v ? String(v) : '';
-    // Если была отложенная перерисовка после merge — выполнить её когда пользователь закончил ввод
     if (pendingRender) {
       pendingRender = false;
       setTimeout(() => {
-        if (document.activeElement?.tagName !== 'INPUT') renderCurrentScreen();
+        if (!document.activeElement || document.activeElement.tagName !== 'INPUT') renderCurrentScreen();
       }, 50);
     }
   }, true);
@@ -1609,7 +1654,6 @@
     openModals.add('settingsOverlay');
   }
 
-  // ─── Cloud UI ─────────────────────────────────────────────
   function updateCloudUI() {
     const connected = cloudConfigured();
     $('cloudConnectBtn').style.display = connected ? 'none' : '';
@@ -1620,10 +1664,10 @@
     const el = $('cloudSetupStatus');
     if (connected && state.cloud.authError) {
       el.className = 'cloud-setup-status error';
-      el.textContent = '⚠ Неверный пароль шифрования. Отключите облако и подключитесь заново с правильным паролем.';
+      el.textContent = '⚠ Неверный пароль шифрования. Отключите облако и подключитесь заново.';
     } else if (connected) {
       el.className = 'cloud-setup-status ok';
-      el.textContent = '🔒 Подключено. Автосинхронизация при любых изменениях.' +
+      el.textContent = '🔒 Подключено. Автосинхронизация при изменениях.' +
         (state.cloud.lastSync ? ' Последняя: ' + new Date(state.cloud.lastSync).toLocaleString() : '');
     } else {
       el.className = 'cloud-setup-status';
@@ -1640,24 +1684,20 @@
     if (passphrase.length < 6) { alert('Пароль должен быть не короче 6 символов.'); return; }
     if (!cryptoAvailable()) { alert('Шифрование недоступно. Используйте HTTPS или localhost.'); return; }
 
-    state.cloud = {
-      enabled: true,
-      binId, masterKey, passphrase,
-      lastSync: null,
-      authError: false
-    };
+    state.cloud = { enabled: true, binId, masterKey, passphrase, lastSync: null, authError: false };
     saveLocal();
     updateCloudUI();
     setCloudIndicator();
     await performSync();
     updateCloudUI();
+    startPolling();
   };
 
   $('cloudSyncBtn').onclick = () => performSync();
 
   $('cloudLoadBtn').onclick = async () => {
     if (!cloudConfigured()) return;
-    if (!confirm('Скачать данные из облака?\n\nЛокальные данные будут полностью заменены облачными.')) return;
+    if (!confirm('Заменить локальные данные облачными?\n\nВсе несохранённые локальные правки будут потеряны.')) return;
     if (!cryptoAvailable()) return;
     try {
       const remoteRaw = await fetchRemoteRaw();
@@ -1677,7 +1717,7 @@
       renderCurrentScreen();
       updateCloudUI();
       setCloudIndicator('ok');
-      alert('Данные загружены из облака.');
+      alert('Данные заменены данными из облака.');
     } catch (e) {
       alert('Ошибка загрузки: ' + (e.message || e));
     }
@@ -1689,10 +1729,25 @@
     state.cloud.lastSync = null;
     state.cloud.authError = false;
     saveLocal();
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     updateCloudUI();
     setCloudIndicator();
   };
-  // ──────────────────────────────────────────────────────────
+
+  $('hardResetBtn').onclick = async () => {
+    if (!confirm('Сбросить кэш и перезагрузить страницу?\n\nЭто снимает Service Worker и принудительно загружает свежую версию кода.')) return;
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const r of regs) await r.unregister();
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        for (const k of keys) await caches.delete(k);
+      }
+    } catch (e) {}
+    location.href = location.pathname + '?v=' + Date.now() + location.hash;
+  };
 
   function renderRatesSection() {
     const R = getEffectiveRates(currentCal, view.year, view.month);
