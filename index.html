@@ -1027,8 +1027,9 @@
       const remote = verifyJson.record || verifyJson;
 
       if (remote && typeof remote === 'object' && remote.__encrypted) {
+        let remoteData;
         try {
-          await decryptJson(remote, state.cloud.passphrase);
+          remoteData = await decryptJson(remote, state.cloud.passphrase);
         } catch (e) {
           state.cloud.authError = true;
           saveLocalOnly();
@@ -1037,8 +1038,25 @@
           cloudSyncing = false;
           return;
         }
+
+        // НОВОЕ: если облако новее — не перезаписываем
+        const remoteModified = remoteData.lastModified || 0;
+        const localModified = state.lastModified || 0;
+        if (remoteModified > localModified) {
+          alert(
+            '⚠ В облаке более свежие данные с другого устройства.\n\n' +
+            'Автосохранение остановлено, данные в облаке НЕ изменены.\n\n' +
+            'Откройте Настройки → Облачная синхронизация и нажмите «Загрузить», чтобы получить актуальные данные.'
+          );
+          state.cloud.authError = true;
+          saveLocalOnly();
+          updateCloudIndicators('error');
+          cloudSyncing = false;
+          return;
+        }
       }
 
+      // Пароль совпал, локальные данные не старее — можно пушить
       const payload = {
         calendars: state.calendars,
         theme: state.theme,
@@ -1114,6 +1132,13 @@
       lastModified: remoteData.lastModified || Date.now()
     };
     saveLocalOnly();
+    // ВАЖНО: обновляем currentCal до вызова applyTheme,
+    // иначе CSS-переменные цветов установятся из старых данных
+    if (currentCalId && state.calendars[currentCalId]) {
+      currentCal = state.calendars[currentCalId];
+    } else {
+      currentCal = null;
+    }
     applyTheme();
     applyOrientation();
   }
@@ -1181,6 +1206,54 @@
     }, 100);
   }
 
+  // ─── Автообновление при возврате во вкладку ─────────────────
+  let cloudCheckInProgress = false;
+  let lastCloudCheck = 0;
+
+  function maybeRefreshFromCloud() {
+    if (cloudCheckInProgress) return;
+    if (document.hidden) return;
+    if (!state.cloud.enabled || state.cloud.authError || !cloudFieldsReady()) return;
+    if (!cryptoAvailable()) return;
+    if (openModals.has('settingsOverlay')) return;
+
+    const nowTs = Date.now();
+    if (nowTs - lastCloudCheck < 5000) return;
+    lastCloudCheck = nowTs;
+
+    checkCloudForUpdates();
+  }
+
+  async function checkCloudForUpdates() {
+    cloudCheckInProgress = true;
+    try {
+      const result = await fetchRemoteData(state.cloud.binId, state.cloud.masterKey, state.cloud.passphrase);
+      if (result.status === 'ok') {
+        state.cloud.authError = false;
+        const remoteModified = result.remoteModified || 0;
+        const localModified = state.lastModified || 0;
+        if (remoteModified > localModified) {
+          // В облаке новее — безопасно подтягиваем
+          applyRemoteToLocal(result.data);
+          renderCurrentScreen();
+        }
+        updateCloudIndicators('ok');
+      } else if (result.status === 'decrypt_failed') {
+        state.cloud.authError = true;
+        saveLocalOnly();
+        updateCloudIndicators('error');
+        showAuthErrorNotification();
+      }
+    } catch (e) {
+      // тихо — сеть моргнула, попробуем в следующий раз
+    } finally {
+      cloudCheckInProgress = false;
+    }
+  }
+
+  document.addEventListener('visibilitychange', maybeRefreshFromCloud);
+  window.addEventListener('focus', maybeRefreshFromCloud);
+
   async function initCloud() {
     updateCloudIndicators();
     if (!state.cloud.enabled) return;
@@ -1203,6 +1276,7 @@
         applyRemoteToLocal(result.data);
         renderCurrentScreen();
       } else {
+        state.cloud.lastSync = Date.now();
         saveLocalOnly();
       }
       updateCloudIndicators('ok');
