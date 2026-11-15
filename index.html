@@ -373,24 +373,34 @@
 
   @media (max-width:999px){
     [data-orientation="landscape"] .app{padding:8px 6px 24px}
+
     [data-orientation="landscape"] .summary{
-      grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      grid-auto-rows:1fr;          /* ← все ряды одинаковой высоты */
+      gap:6px;margin-bottom:10px}
 
     /* Порядок в мобильном landscape:
        Норма, Переработка, Выходные, Отработано, Зарплата, Выплачено */
-    [data-orientation="landscape"] #sNorm{order:1}
-    [data-orientation="landscape"] #sOt{order:2}
-    [data-orientation="landscape"] #sWeekend{order:3}
-    [data-orientation="landscape"] #sWorked{order:4}
-    [data-orientation="landscape"] #sPayCard{order:5}
-    [data-orientation="landscape"] #sPaidCard{order:6}
+    [data-orientation="landscape"] .summary > .stat:nth-child(1){order:1} /* Норма */
+    [data-orientation="landscape"] .summary > .stat:nth-child(3){order:2} /* Переработка */
+    [data-orientation="landscape"] .summary > .stat:nth-child(4){order:3} /* Выходные */
+    [data-orientation="landscape"] .summary > .stat:nth-child(2){order:4} /* Отработано */
+    [data-orientation="landscape"] .summary > .stat:nth-child(5){order:5} /* Зарплата */
+    [data-orientation="landscape"] .summary > .stat:nth-child(6){order:6} /* Выплачено */
 
-    /* Все 6 блоков одинаковой высоты — компенсируем доп. строку у «Выплачено» */
-    [data-orientation="landscape"] .stat{padding:8px 10px;border-radius:10px;
-      min-height:72px;display:flex;flex-direction:column;justify-content:center}
+    /* Одинаковый размер всех блоков */
+    [data-orientation="landscape"] .stat{
+      padding:8px 10px;border-radius:10px;
+      min-height:64px;
+      display:flex;flex-direction:column;justify-content:center;
+      box-sizing:border-box;min-width:0}
+
     [data-orientation="landscape"] .stat .label{font-size:9px;margin-bottom:3px}
     [data-orientation="landscape"] .stat .value{font-size:14px}
     [data-orientation="landscape"] .stat .value small{font-size:9px}
+    /* Строка с процентом выплачено делает блок выше — на мобильном убираем её */
+    [data-orientation="landscape"] .paid-stat .paid-sub{display:none}
+
     [data-orientation="landscape"] .calendar{padding:6px;border-radius:10px}
     [data-orientation="landscape"] .weekdays,
     [data-orientation="landscape"] .grid{gap:2px}
